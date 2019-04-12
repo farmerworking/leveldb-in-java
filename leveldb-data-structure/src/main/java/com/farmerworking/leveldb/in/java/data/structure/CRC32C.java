@@ -112,6 +112,16 @@ public final class CRC32C implements Checksum {
     }
 
     /**
+     * CRC32C.getValue() returns a long which can be treated as a int
+     *
+     * Create a new CRC32C object from value return by CRC32C.getValue()
+     * @param crc
+     */
+    public CRC32C(int crc) {
+        this.crc = ~crc;
+    }
+
+    /**
      * Updates the CRC-32C checksum with the specified byte (the low eight bits
      * of the argument b).
      */
