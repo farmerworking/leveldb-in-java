@@ -1,11 +1,11 @@
 package com.farmerworking.leveldb.in.java.data.structure;
 
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.zip.Checksum;
 
-import jdk.internal.HotSpotIntrinsicCandidate;
-import jdk.internal.misc.Unsafe;
+import sun.misc.Unsafe;
 import sun.nio.ch.DirectBuffer;
 
 /**
@@ -38,7 +38,16 @@ public final class CRC32C implements Checksum {
     private static final int CRC32C_POLY = 0x1EDC6F41;
     private static final int REVERSED_CRC32C_POLY = Integer.reverse(CRC32C_POLY);
 
-    private static final Unsafe UNSAFE = Unsafe.getUnsafe();
+    private static final Unsafe UNSAFE;
+    static {
+        try {
+            Field f =Unsafe.class.getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            UNSAFE = (Unsafe) f.get(null);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     // Lookup tables
     // Lookup table for single byte calculations
@@ -137,7 +146,6 @@ public final class CRC32C implements Checksum {
      * at the buffer's position. Upon return, the buffer's position will be
      * updated to its limit; its limit will not have been changed.
      */
-    @Override
     public void update(ByteBuffer buffer) {
         int pos = buffer.position();
         int limit = buffer.limit();
@@ -183,7 +191,6 @@ public final class CRC32C implements Checksum {
     /**
      * Updates the CRC-32C checksum with the specified array of bytes.
      */
-    @HotSpotIntrinsicCandidate
     private static int updateBytes(int crc, byte[] b, int off, int end) {
 
         // Do only byte reads for arrays so short they can't be aligned
@@ -258,7 +265,6 @@ public final class CRC32C implements Checksum {
     /**
      * Updates the CRC-32C checksum reading from the specified address.
      */
-    @HotSpotIntrinsicCandidate
     private static int updateDirectByteBuffer(int crc, long address,
                                               int off, int end) {
 
