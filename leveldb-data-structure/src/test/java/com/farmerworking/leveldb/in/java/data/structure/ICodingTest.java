@@ -104,4 +104,119 @@ public abstract class ICodingTest {
         assertEquals(0x07, chars[6]);
         assertEquals(0x08, chars[7]);
     }
+
+    @Test
+    public void testVarint32() throws Exception {
+        StringBuilder s = new StringBuilder();
+        for (int i = 0; i < 32 * 32; i++) {
+            int v = (i / 32) << (i % 32);
+            getImpl().putVarint32(s, v);
+        }
+        getImpl().putVarint32(s, Integer.MAX_VALUE);
+        getImpl().putVarint32(s, Integer.MIN_VALUE);
+
+        char[] chars = s.toString().toCharArray();
+        int offset = 0;
+        for (int i = 0; i < 32 * 32; i++) {
+            int expected = ((i / 32) << (i % 32));
+            Pair<Integer, Integer> result = getImpl().decodeVarint32(chars, offset);
+            assertNotNull(result);
+            assertEquals(expected, result.getKey().intValue());
+            assertEquals(getImpl().varintLength(result.getKey()), result.getValue() - offset);
+            offset = result.getValue();
+        }
+
+        Pair<Integer, Integer> result = getImpl().decodeVarint32(chars, offset);
+        assertNotNull(result);
+        assertEquals(Integer.MAX_VALUE, result.getKey().intValue());
+        assertEquals(getImpl().varintLength(result.getKey()), result.getValue() - offset);
+        offset = result.getValue();
+
+        result = getImpl().decodeVarint32(chars, offset);
+        assertNotNull(result);
+        assertEquals(Integer.MIN_VALUE, result.getKey().intValue());
+        assertEquals(getImpl().varintLength(result.getKey()), result.getValue() - offset);
+        offset = result.getValue();
+
+        assertEquals(offset, chars.length);
+    }
+
+    @Test
+    public void testVarint64() {
+        // Construct the list of values to check
+        Vector<Long> values = new Vector<>();
+        // Some special values
+        values.add(0L);
+        values.add(100L);
+        values.add(Long.MIN_VALUE);
+        values.add(Long.MIN_VALUE + 1);
+        values.add(Long.MAX_VALUE);
+        values.add(Long.MAX_VALUE - 1);
+        for (int k = 0; k < 64; k++) {
+            // Test values near powers of two
+            long power = 1 << k;
+            values.add(power);
+            values.add(power - 1);
+            values.add(power+1);
+        }
+
+        StringBuilder s = new StringBuilder();
+        for (int i = 0; i < values.size(); i++) {
+            getImpl().putVarint64(s, values.get(i));
+        }
+
+        char[] chars = s.toString().toCharArray();
+        int index = 0;
+        for (int i = 0; i < values.size(); i++) {
+            assertTrue(index < s.length());
+            Pair<Long, Integer> pair = getImpl().decodeVarint64(chars, index);
+            assertNotNull(pair);
+            assertEquals(values.get(i), pair.getKey());
+            assertEquals(getImpl().varintLength(pair.getKey()), pair.getValue() - index);
+            index = pair.getValue();
+        }
+        assertEquals(index, s.length());
+    }
+
+    @Test
+    public void testVarint32Overflow() {
+        char[] input = new char[] {0x81, 0x82, 0x83, 0x84, 0x85, 0x11};
+        assertNull(getImpl().decodeVarint32(input, 0));
+    }
+
+    @Test
+    public void testVarint32Truncation() {
+        StringBuilder s = new StringBuilder();
+        getImpl().putVarint32(s, Integer.MIN_VALUE);
+        char[] chars = s.toString().toCharArray();
+        for (int len = 0; len < s.length() - 1; len++) {
+            assertNull(getImpl().decodeVarint32(chars, 0, len));
+        }
+
+        Pair<Integer, Integer> pair = getImpl().decodeVarint32(chars, 0);
+        assertNotNull(pair);
+        assertEquals(Integer.MIN_VALUE, pair.getKey().intValue());
+        assertEquals(chars.length, pair.getValue().intValue());
+    }
+
+    @Test
+    public void testVarint64Overflow() {
+        char[] input = new char[] {0x81, 0x82, 0x83, 0x84, 0x85, 0x81, 0x82, 0x83, 0x84, 0x85, 0x11};
+        assertNull(getImpl().decodeVarint64(input, 0));
+    }
+
+    @Test
+    public void testVarint64Truncation() {
+        StringBuilder s = new StringBuilder();
+        getImpl().putVarint64(s, Long.MIN_VALUE);
+        char[] chars = s.toString().toCharArray();
+        for (int len = 0; len < s.length() - 1; len++) {
+            assertNull(getImpl().decodeVarint64(chars, 0, len));
+        }
+
+        Pair<Long, Integer> pair = getImpl().decodeVarint64(chars, 0);
+        assertNotNull(pair);
+        assertEquals(Long.MIN_VALUE, pair.getKey().longValue());
+        assertEquals(chars.length, pair.getValue().intValue());
+    }
 }

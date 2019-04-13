@@ -14,4 +14,36 @@ public interface ICoding {
     long decodeFixed64(char[] buffer, int offset);
 
     void putFixed64(StringBuilder buffer, long value);
+
+    /**
+     * @return value encode length
+     */
+    int encodeVarint32(char[] buffer, int offset, int value);
+
+    /**
+     * @return a pair. pair's left is decoded value. pair's right is offset just past decoded value
+     */
+    Pair<Integer, Integer> decodeVarint32(char[] buffer, int offset);
+
+    Pair<Integer, Integer> decodeVarint32(char[] buffer, int offset, int length);
+
+    void putVarint32(StringBuilder builder, int value);
+
+    /**
+     * @return value encode length
+     */
+    int encodeVarint64(char[] buffer, int offset, long value);
+
+    /**
+     * @return a pair. pair's left is decoded value. pair's right is offset just past decoded value
+     */
+    Pair<Long, Integer> decodeVarint64(char[] buffer, int offset);
+
+    Pair<Long, Integer> decodeVarint64(char[] buffer, int offset, int length);
+
+    void putVarint64(StringBuilder builder, long value);
+
+    int varintLength(long value);
+
+    int varintLength(int value);
 }
