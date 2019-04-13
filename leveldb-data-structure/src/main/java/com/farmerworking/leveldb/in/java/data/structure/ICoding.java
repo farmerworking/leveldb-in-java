@@ -46,4 +46,13 @@ public interface ICoding {
     int varintLength(long value);
 
     int varintLength(int value);
+
+    void putLengthPrefixedString(StringBuilder buffer, String value);
+
+    /**
+     * @return a pair. pair's left is length prefixed string. pair's right is offset just past the string
+     */
+    Pair<String, Integer> getLengthPrefixedString(char[] buffer, int offset);
+
+    Pair<String, Integer> getLengthPrefixedString(char[] buffer, int offset, int length);
 }

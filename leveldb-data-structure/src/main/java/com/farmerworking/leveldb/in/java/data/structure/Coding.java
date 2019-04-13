@@ -144,6 +144,32 @@ public class Coding implements ICoding {
         return varintLength(Integer.toUnsignedLong(value));
     }
 
+    @Override
+    public void putLengthPrefixedString(StringBuilder buffer, String value) {
+        putVarint32(buffer, value.length());
+        buffer.append(value);
+    }
+
+    @Override
+    public Pair<String, Integer> getLengthPrefixedString(char[] buffer, int offset) {
+        return getLengthPrefixedString(buffer, offset, buffer.length);
+    }
+
+    @Override
+    public Pair<String, Integer> getLengthPrefixedString(char[] buffer, int offset, int length) {
+        Pair<Integer, Integer> p = decodeVarint32(buffer, offset);
+        if (p == null) return null; // due to overflow or truncation
+
+        int strLength = p.getKey();
+        int strStartOffset = p.getValue();
+
+        if (strLength + strStartOffset > length) return null; // buffer is truncated
+        return new Pair<>(
+                new String(buffer, strStartOffset, strLength),
+                strStartOffset + strLength
+        );
+    }
+
     private Pair<Long, Integer> decodeVarintInternal(char[] buffer, int offset, int limit, int shiftLimit) {
         long result = 0L;
         for (int shift = 0; shift <= shiftLimit && offset < limit; shift += 7) {

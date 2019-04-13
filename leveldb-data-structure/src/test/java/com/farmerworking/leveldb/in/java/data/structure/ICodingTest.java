@@ -1,6 +1,7 @@
 package com.farmerworking.leveldb.in.java.data.structure;
 
 import javafx.util.Pair;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
 
 import java.util.Vector;
@@ -218,5 +219,75 @@ public abstract class ICodingTest {
         assertNotNull(pair);
         assertEquals(Long.MIN_VALUE, pair.getKey().longValue());
         assertEquals(chars.length, pair.getValue().intValue());
+    }
+
+    @Test
+    public void testStrings() {
+        StringBuilder s = new StringBuilder();
+        getImpl().putLengthPrefixedString(s, "");
+        getImpl().putLengthPrefixedString(s, "foo");
+        getImpl().putLengthPrefixedString(s, "bar");
+        getImpl().putLengthPrefixedString(s, StringUtils.repeat("x", 200));
+
+        char[] chars = s.toString().toCharArray();
+        Pair<String, Integer> result = getImpl().getLengthPrefixedString(chars, 0);
+        assertNotNull(result);
+        assertEquals("", result.getKey());
+
+        result = getImpl().getLengthPrefixedString(chars, result.getValue());
+        assertNotNull(result);
+        assertEquals("foo", result.getKey());
+
+        result = getImpl().getLengthPrefixedString(chars, result.getValue());
+        assertNotNull(result);
+        assertEquals("bar", result.getKey());
+
+        result = getImpl().getLengthPrefixedString(chars, result.getValue());
+        assertNotNull(result);
+        assertEquals(StringUtils.repeat("x", 200), result.getKey());
+
+        assertEquals(result.getValue().intValue(), chars.length);
+    }
+
+    @Test
+    public void testStringLengthOverflow() {
+        char[] input = new char[] {0x81, 0x82, 0x83, 0x84, 0x85, 0x11};
+        assertNull(getImpl().decodeVarint32(input, 0));
+        assertNull(getImpl().getLengthPrefixedString(input, 0));
+    }
+
+    @Test
+    public void testStringLengthTruncation() {
+        StringBuilder s = new StringBuilder();
+        int strLength = 100000; // varintLength is 3
+        getImpl().putLengthPrefixedString(s, StringUtils.repeat("x", strLength));
+        char[] chars = s.toString().toCharArray();
+        for (int len = 0; len < getImpl().varintLength(strLength) - 1; len++) {
+            assertNull(getImpl().decodeVarint32(chars, 0, len));
+            assertNull(getImpl().getLengthPrefixedString(chars, 0, len));
+        }
+
+        assertNotNull(getImpl().decodeVarint32(chars, 0));
+        Pair<String, Integer> pair = getImpl().getLengthPrefixedString(chars, 0);
+        assertNotNull(pair);
+        assertEquals(StringUtils.repeat("x", strLength), pair.getKey());
+        assertEquals(pair.getValue().intValue(), chars.length);
+    }
+
+    @Test
+    public void testStringBufferTooSmall() {
+        StringBuilder s = new StringBuilder();
+        int strLength = 100000; // varintLength is 3
+        getImpl().putLengthPrefixedString(s, StringUtils.repeat("x", strLength));
+        char[] chars = s.toString().toCharArray();
+        for (int len = getImpl().varintLength(strLength); len < chars.length - 1; len++) {
+            assertNotNull(getImpl().decodeVarint32(chars, 0, len));
+            assertNull(getImpl().getLengthPrefixedString(chars, 0, len));
+        }
+
+        Pair<String, Integer> pair = getImpl().getLengthPrefixedString(chars, 0);
+        assertNotNull(pair);
+        assertEquals(StringUtils.repeat("x", strLength), pair.getKey());
+        assertEquals(pair.getValue().intValue(), chars.length);
     }
 }
