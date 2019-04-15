@@ -22,5 +22,13 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.farmerworking</groupId>
+            <artifactId>leveldb-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.farmerworking</groupId>
+            <artifactId>leveldb-file</artifactId>
+        </dependency>
     </dependencies>
 </project>
