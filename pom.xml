@@ -19,6 +19,7 @@
     <modules>
         <module>leveldb-common</module>
         <module>leveldb-data-structure</module>
+        <module>leveldb-file</module>
     </modules>
 
     <dependencyManagement>
@@ -32,6 +33,16 @@
                 <groupId>junit</groupId>
                 <artifactId>junit</artifactId>
                 <version>4.12</version>
+            </dependency>
+            <dependency>
+                <groupId>com.farmerworking</groupId>
+                <artifactId>leveldb-common</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.farmerworking</groupId>
+                <artifactId>leveldb-file</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
