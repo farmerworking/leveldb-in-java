@@ -55,4 +55,8 @@ public interface ICoding {
     Pair<String, Integer> getLengthPrefixedString(char[] buffer, int offset);
 
     Pair<String, Integer> getLengthPrefixedString(char[] buffer, int offset, int length);
+
+    public static ICoding getDefaultImpl() {
+        return new Coding();
+    }
 }
