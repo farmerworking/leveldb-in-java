@@ -69,6 +69,10 @@ public abstract class ILogTest {
             return Status.OK();
         }
 
+        public void replace(int index, char newChar) {
+            builder.setCharAt(index, newChar);
+        }
+
         public int getLength() {
             return builder.length();
         }
@@ -197,9 +201,7 @@ public abstract class ILogTest {
     }
 
     void setByte(int offset, char new_byte) {
-        char[] chars = dest.getContent().toCharArray();
-        chars[offset] = new_byte;
-        dest.setContent(new String(chars));
+        dest.replace(offset, new_byte);
     }
 
     void shrinkSize(int bytes) {

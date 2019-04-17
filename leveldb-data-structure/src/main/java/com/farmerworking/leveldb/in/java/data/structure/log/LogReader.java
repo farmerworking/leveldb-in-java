@@ -15,7 +15,7 @@ public class LogReader implements ILogReader {
     private SequentialFile file;
     private ILogReporter reporter;
     private boolean checksum;
-    private String buffer = "";
+    private LogBuffer buffer;
     // Last Read() indicated EOF by returning < kBlockSize
     private boolean eof;
 
@@ -35,6 +35,7 @@ public class LogReader implements ILogReader {
         this.eof = false;
         this.lastRecordOffset = 0;
         this.endOfBufferOffset = 0;
+        this.buffer = new LogBuffer();
     }
 
     // Returns the physical offset of the last record returned by ReadRecord.
@@ -79,7 +80,7 @@ public class LogReader implements ILogReader {
     //                    kUnknown LogicalRecord
     //
     private Pair<Boolean, String> LogicalRecord(Pair<RecordType, String> physicalRecord) {
-        long recordOffset = endOfBufferOffset - buffer.length() - RecordType.kHeaderSize - physicalRecord.getValue()
+        long recordOffset = endOfBufferOffset - buffer.remain() - RecordType.kHeaderSize - physicalRecord.getValue()
                 .length();
         switch (physicalRecord.getKey()) {
             case kFullType:
@@ -173,7 +174,7 @@ public class LogReader implements ILogReader {
     // Return type, or one of the preceding special values
     private Pair<RecordType, String> readPhysicalRecord() {
         while(true) {
-            if (buffer.length() < RecordType.kHeaderSize) {
+            if (buffer.remain() < RecordType.kHeaderSize) {
                 if (eof) {
                     // if buffer is non-empty, we have a truncated header at the
                     // end of the file, which can be caused by the writer crashing in the
@@ -181,10 +182,10 @@ public class LogReader implements ILogReader {
                     // just report EOF.
                     // Since the write request is interrupted and not returned, user should not treat it as an
                     // success write
-                    buffer = "";
+                    buffer.clear();
                     return new Pair<>(RecordType.kEof, "");
                 } else {
-                    buffer = ""; // Last read was a full read, so this is a trailer to skip
+                    buffer.clear(); // Last read was a full read, so this is a trailer to skip
                     Status status = readBlock();
 
                     if (status.isNotOk()) {
@@ -196,16 +197,16 @@ public class LogReader implements ILogReader {
             }
 
             // Skip physical record that started before initial_offset_
-            boolean skipRecordsBeforeInitialOffset = endOfBufferOffset - buffer.length() < initialOffset;
+            boolean skipRecordsBeforeInitialOffset = endOfBufferOffset - buffer.remain() < initialOffset;
 
             // Parse the header
-            char[] header = buffer.toCharArray();
+            char[] header = buffer.getChars(0, RecordType.kHeaderSize);
             Pair<Integer, RecordType> parseResult = parseHeader(header);
             int length = parseResult.getKey();
             RecordType type = parseResult.getValue();
-            if (RecordType.kHeaderSize + length > buffer.length()) {
-                int dropSize = buffer.length();
-                buffer = "";
+            if (RecordType.kHeaderSize + length > buffer.remain()) {
+                int dropSize = buffer.remain();
+                buffer.clear();
 
                 if (eof) {
                     // If the end of the file has been reached without reading |length| bytes
@@ -222,34 +223,35 @@ public class LogReader implements ILogReader {
                 // Skip zero length record without reporting any drops since
                 // such records are produced by the mmap based writing code in
                 // env_posix.cc that preallocates file regions.
-                buffer = "";
+                buffer.clear();
                 return new Pair<>(RecordType.kEof, "");
             }
 
             // check crc
+            char[] payload = buffer.getChars(RecordType.kHeaderSize - 1, length + 1);
             if (checksum) {
                 int expectedCrc = crc32c.unmask(coding.decodeFixed32(header, 0));
-                byte[] bytes = buffer.substring(6, RecordType.kHeaderSize + length).getBytes(StandardCharsets.UTF_8);
+                byte[] bytes = new String(payload).getBytes(StandardCharsets.UTF_8);
                 int actualCrc = crc32c.value(bytes, 0, bytes.length);
                 if (actualCrc != expectedCrc) {
                     // Drop the rest of the buffer since "length" itself may have
                     // been corrupted and if we trust it, we could find some
                     // fragment of a real log record that just happens to look
                     // like a valid log record.
-                    int dropSize = buffer.length();
-                    buffer = "";
+                    int dropSize = buffer.remain();
+                    buffer.clear();
                     reportCorruption(dropSize, "checksum mismatch");
                     return new Pair<>(RecordType.kBadRecord, "");
                 }
             }
 
-            buffer = buffer.substring(RecordType.kHeaderSize + length);
+            buffer.seek(RecordType.kHeaderSize + length);
 
             if (skipRecordsBeforeInitialOffset) {
                 continue;
             }
 
-            return new Pair<>(type, (new String(header, RecordType.kHeaderSize, length)));
+            return new Pair<>(type, new String(payload, 1, length));
         }
     }
 
@@ -264,10 +266,10 @@ public class LogReader implements ILogReader {
     private Status readBlock() {
         Pair<Status, String> readResult = file.read(RecordType.kBlockSize);
         if (readResult.getKey().isOk()) {
-            buffer = readResult.getValue();
-            endOfBufferOffset = endOfBufferOffset + buffer.length();
+            buffer.set(readResult.getValue());
+            endOfBufferOffset = endOfBufferOffset + buffer.remain();
 
-            if (buffer.length() < RecordType.kBlockSize) {
+            if (buffer.remain() < RecordType.kBlockSize) {
                 eof = true;
             }
         } else {
