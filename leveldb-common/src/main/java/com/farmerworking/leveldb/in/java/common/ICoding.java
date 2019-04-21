@@ -1,8 +1,10 @@
-package com.farmerworking.leveldb.in.java.data.structure;
+package com.farmerworking.leveldb.in.java.common;
 
 import javafx.util.Pair;
 
 public interface ICoding {
+    ICoding instance = getDefaultImpl();
+
     void encodeFixed32(char[] buffer, int offset, int value);
 
     int decodeFixed32(char[] buffer, int offset);
@@ -56,7 +58,11 @@ public interface ICoding {
 
     Pair<String, Integer> getLengthPrefixedString(char[] buffer, int offset, int length);
 
-    public static ICoding getDefaultImpl() {
+    static ICoding getDefaultImpl() {
         return new Coding();
+    }
+
+    static ICoding getInstance() {
+        return instance;
     }
 }

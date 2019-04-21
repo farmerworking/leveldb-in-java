@@ -1,4 +1,4 @@
-package com.farmerworking.leveldb.in.java.data.structure;
+package com.farmerworking.leveldb.in.java.common;
 
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;

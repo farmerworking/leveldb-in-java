@@ -1,4 +1,4 @@
-package com.farmerworking.leveldb.in.java.data.structure;
+package com.farmerworking.leveldb.in.java.common;
 
 public class CodingTest extends ICodingTest {
     @Override

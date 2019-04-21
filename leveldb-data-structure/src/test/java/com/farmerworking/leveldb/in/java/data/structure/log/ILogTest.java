@@ -1,8 +1,8 @@
 package com.farmerworking.leveldb.in.java.data.structure.log;
 
 import com.farmerworking.leveldb.in.java.common.Status;
-import com.farmerworking.leveldb.in.java.data.structure.ICRC32C;
-import com.farmerworking.leveldb.in.java.data.structure.ICoding;
+import com.farmerworking.leveldb.in.java.common.ICRC32C;
+import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
 import javafx.util.Pair;

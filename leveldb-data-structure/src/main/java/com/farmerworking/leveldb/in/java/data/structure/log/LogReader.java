@@ -1,17 +1,14 @@
 package com.farmerworking.leveldb.in.java.data.structure.log;
 
 import com.farmerworking.leveldb.in.java.common.Status;
-import com.farmerworking.leveldb.in.java.data.structure.ICRC32C;
-import com.farmerworking.leveldb.in.java.data.structure.ICoding;
+import com.farmerworking.leveldb.in.java.common.ICRC32C;
+import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
 import javafx.util.Pair;
 
 import java.nio.charset.StandardCharsets;
 
 public class LogReader implements ILogReader {
-    private static ICoding coding = ICoding.getDefaultImpl();
-    private static ICRC32C crc32c = ICRC32C.getDefaultImpl();
-
     private SequentialFile file;
     private ILogReporter reporter;
     private boolean checksum;
@@ -230,9 +227,9 @@ public class LogReader implements ILogReader {
             // check crc
             char[] payload = buffer.getChars(RecordType.kHeaderSize - 1, length + 1);
             if (checksum) {
-                int expectedCrc = crc32c.unmask(coding.decodeFixed32(header, 0));
+                int expectedCrc = ICRC32C.getInstance().unmask(ICoding.getInstance().decodeFixed32(header, 0));
                 byte[] bytes = new String(payload).getBytes(StandardCharsets.UTF_8);
-                int actualCrc = crc32c.value(bytes, 0, bytes.length);
+                int actualCrc = ICRC32C.getInstance().value(bytes, 0, bytes.length);
                 if (actualCrc != expectedCrc) {
                     // Drop the rest of the buffer since "length" itself may have
                     // been corrupted and if we trust it, we could find some

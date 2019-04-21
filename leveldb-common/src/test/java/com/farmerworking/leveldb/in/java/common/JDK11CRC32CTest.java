@@ -1,4 +1,4 @@
-package com.farmerworking.leveldb.in.java.data.structure;
+package com.farmerworking.leveldb.in.java.common;
 
 public class JDK11CRC32CTest extends ICRC32CTest {
     @Override

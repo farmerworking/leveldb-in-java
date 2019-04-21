@@ -1,19 +1,19 @@
 package com.farmerworking.leveldb.in.java.data.structure.log;
 
-import com.farmerworking.leveldb.in.java.data.structure.ICRC32C;
-import com.farmerworking.leveldb.in.java.data.structure.ICoding;
+import com.farmerworking.leveldb.in.java.common.ICRC32C;
+import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
 
 public class LogTest extends ILogTest {
     @Override
     protected ICRC32C getCrc32CImpl() {
-        return ICRC32C.getDefaultImpl();
+        return ICRC32C.getInstance();
     }
 
     @Override
     protected ICoding getCodingImpl() {
-        return ICoding.getDefaultImpl();
+        return ICoding.getInstance();
     }
 
     @Override

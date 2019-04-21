@@ -1,4 +1,4 @@
-package com.farmerworking.leveldb.in.java.data.structure;
+package com.farmerworking.leveldb.in.java.common;
 
 public abstract class AbstractCRC32C implements ICRC32C {
     protected static int kMaskDelta = 0xa282ead8;
