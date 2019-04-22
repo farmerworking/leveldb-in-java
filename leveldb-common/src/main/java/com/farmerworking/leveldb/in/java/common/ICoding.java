@@ -71,4 +71,8 @@ public interface ICoding {
     static ICoding getInstance() {
         return instance;
     }
+
+    int getFixed32Length();
+
+    int getFixed64Length();
 }
