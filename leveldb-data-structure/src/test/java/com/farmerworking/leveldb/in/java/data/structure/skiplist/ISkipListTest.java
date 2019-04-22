@@ -111,4 +111,10 @@ public abstract class ISkipListTest {
         }
         assertTrue(!iter.valid());
     }
+
+    @Test
+    public void testMemoryUsage() {
+        ISkipList<Long> list = getImpl(new TmpComparator());
+        assertTrue(list.approximateMemoryUsage() >= 0);
+    }
 }

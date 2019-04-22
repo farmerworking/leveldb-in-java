@@ -9,4 +9,7 @@ public interface ISkipList<T> {
     boolean contains(T key);
 
     ISkipListIterator<T> iterator();
+
+    // Returns an estimate of the number of bytes of data in use by this data structure.
+    int approximateMemoryUsage();
 }
