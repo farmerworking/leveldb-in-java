@@ -17,8 +17,8 @@ public class JDKSkipList<T> implements ISkipList<T> {
     public void insert(T key) {
         this.internalSkipList.add(key);
 
-        if (key instanceof String) {
-            memoryUsage.addAndGet(((String) key).length());
+        if (key instanceof Sizable) {
+            memoryUsage.addAndGet(((Sizable) key).memoryUsage());
         }
     }
 
