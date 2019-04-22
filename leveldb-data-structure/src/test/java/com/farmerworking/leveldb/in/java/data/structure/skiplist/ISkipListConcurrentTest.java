@@ -1,4 +1,4 @@
-package com.farmerworking.leveldb.in.java.data.structure.memory;
+package com.farmerworking.leveldb.in.java.data.structure.skiplist;
 
 import javafx.util.Pair;
 import org.junit.Test;

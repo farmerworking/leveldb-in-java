@@ -1,4 +1,4 @@
-package com.farmerworking.leveldb.in.java.data.structure.memory;
+package com.farmerworking.leveldb.in.java.data.structure.skiplist;
 
 public interface ISkipListIterator<T> {
     boolean valid();
