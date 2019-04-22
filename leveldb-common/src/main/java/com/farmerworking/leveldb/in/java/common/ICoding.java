@@ -49,6 +49,8 @@ public interface ICoding {
 
     int varintLength(int value);
 
+    void putLengthPrefixedString(StringBuilder buffer, char[] value);
+
     void putLengthPrefixedString(StringBuilder buffer, String value);
 
     /**
@@ -57,6 +59,10 @@ public interface ICoding {
     Pair<String, Integer> getLengthPrefixedString(char[] buffer, int offset);
 
     Pair<String, Integer> getLengthPrefixedString(char[] buffer, int offset, int length);
+
+    Pair<char[], Integer> getLengthPrefixedChars(char[] buffer, int offset);
+
+    Pair<char[], Integer> getLengthPrefixedChars(char[] buffer, int offset, int length);
 
     static ICoding getDefaultImpl() {
         return new Coding();

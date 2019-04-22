@@ -250,10 +250,45 @@ public abstract class ICodingTest {
     }
 
     @Test
+    public void testStringsUsingChars() {
+        StringBuilder s = new StringBuilder();
+        getImpl().putLengthPrefixedString(s, "".toCharArray());
+        getImpl().putLengthPrefixedString(s, "foo".toCharArray());
+        getImpl().putLengthPrefixedString(s, "bar".toCharArray());
+        getImpl().putLengthPrefixedString(s, StringUtils.repeat("x", 200).toCharArray());
+
+        char[] chars = s.toString().toCharArray();
+        Pair<char[], Integer> result = getImpl().getLengthPrefixedChars(chars, 0);
+        assertNotNull(result);
+        assertArrayEquals("".toCharArray(), result.getKey());
+
+        result = getImpl().getLengthPrefixedChars(chars, result.getValue());
+        assertNotNull(result);
+        assertArrayEquals("foo".toCharArray(), result.getKey());
+
+        result = getImpl().getLengthPrefixedChars(chars, result.getValue());
+        assertNotNull(result);
+        assertArrayEquals("bar".toCharArray(), result.getKey());
+
+        result = getImpl().getLengthPrefixedChars(chars, result.getValue());
+        assertNotNull(result);
+        assertArrayEquals(StringUtils.repeat("x", 200).toCharArray(), result.getKey());
+
+        assertEquals(result.getValue().intValue(), chars.length);
+    }
+
+    @Test
     public void testStringLengthOverflow() {
         char[] input = new char[] {0x81, 0x82, 0x83, 0x84, 0x85, 0x11};
         assertNull(getImpl().decodeVarint32(input, 0));
         assertNull(getImpl().getLengthPrefixedString(input, 0));
+    }
+
+    @Test
+    public void testStringLengthOverflow2() {
+        char[] input = new char[] {0x81, 0x82, 0x83, 0x84, 0x85, 0x11};
+        assertNull(getImpl().decodeVarint32(input, 0));
+        assertNull(getImpl().getLengthPrefixedChars(input, 0));
     }
 
     @Test
@@ -275,6 +310,24 @@ public abstract class ICodingTest {
     }
 
     @Test
+    public void testStringLengthTruncation2() {
+        StringBuilder s = new StringBuilder();
+        int strLength = 100000; // varintLength is 3
+        getImpl().putLengthPrefixedString(s, StringUtils.repeat("x", strLength).toCharArray());
+        char[] chars = s.toString().toCharArray();
+        for (int len = 0; len < getImpl().varintLength(strLength) - 1; len++) {
+            assertNull(getImpl().decodeVarint32(chars, 0, len));
+            assertNull(getImpl().getLengthPrefixedChars(chars, 0, len));
+        }
+
+        assertNotNull(getImpl().decodeVarint32(chars, 0));
+        Pair<char[], Integer> pair = getImpl().getLengthPrefixedChars(chars, 0);
+        assertNotNull(pair);
+        assertArrayEquals(StringUtils.repeat("x", strLength).toCharArray(), pair.getKey());
+        assertEquals(pair.getValue().intValue(), chars.length);
+    }
+
+    @Test
     public void testStringBufferTooSmall() {
         StringBuilder s = new StringBuilder();
         int strLength = 100000; // varintLength is 3
@@ -288,6 +341,23 @@ public abstract class ICodingTest {
         Pair<String, Integer> pair = getImpl().getLengthPrefixedString(chars, 0);
         assertNotNull(pair);
         assertEquals(StringUtils.repeat("x", strLength), pair.getKey());
+        assertEquals(pair.getValue().intValue(), chars.length);
+    }
+
+    @Test
+    public void testStringBufferTooSmall2() {
+        StringBuilder s = new StringBuilder();
+        int strLength = 100000; // varintLength is 3
+        getImpl().putLengthPrefixedString(s, StringUtils.repeat("x", strLength).toCharArray());
+        char[] chars = s.toString().toCharArray();
+        for (int len = getImpl().varintLength(strLength); len < chars.length - 1; len++) {
+            assertNotNull(getImpl().decodeVarint32(chars, 0, len));
+            assertNull(getImpl().getLengthPrefixedChars(chars, 0, len));
+        }
+
+        Pair<char[], Integer> pair = getImpl().getLengthPrefixedChars(chars, 0);
+        assertNotNull(pair);
+        assertArrayEquals(StringUtils.repeat("x", strLength).toCharArray(), pair.getKey());
         assertEquals(pair.getValue().intValue(), chars.length);
     }
 }

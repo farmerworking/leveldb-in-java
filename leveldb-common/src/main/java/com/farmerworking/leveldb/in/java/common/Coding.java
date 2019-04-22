@@ -2,6 +2,8 @@ package com.farmerworking.leveldb.in.java.common;
 
 import javafx.util.Pair;
 
+import java.util.Arrays;
+
 public class Coding implements ICoding {
     static final int FIXED_32_LENGTH = 4;
     static final int FIXED_64_LENGTH = 8;
@@ -145,6 +147,12 @@ public class Coding implements ICoding {
     }
 
     @Override
+    public void putLengthPrefixedString(StringBuilder buffer, char[] value) {
+        putVarint32(buffer, value.length);
+        buffer.append(value);
+    }
+
+    @Override
     public void putLengthPrefixedString(StringBuilder buffer, String value) {
         putVarint32(buffer, value.length());
         buffer.append(value);
@@ -166,6 +174,26 @@ public class Coding implements ICoding {
         if (strLength + strStartOffset > length) return null; // buffer is truncated
         return new Pair<>(
                 new String(buffer, strStartOffset, strLength),
+                strStartOffset + strLength
+        );
+    }
+
+    @Override
+    public Pair<char[], Integer> getLengthPrefixedChars(char[] buffer, int offset) {
+        return getLengthPrefixedChars(buffer, offset, buffer.length);
+    }
+
+    @Override
+    public Pair<char[], Integer> getLengthPrefixedChars(char[] buffer, int offset, int length) {
+        Pair<Integer, Integer> p = decodeVarint32(buffer, offset);
+        if (p == null) return null; // due to overflow or truncation
+
+        int strLength = p.getKey();
+        int strStartOffset = p.getValue();
+
+        if (strLength + strStartOffset > length) return null; // buffer is truncated
+        return new Pair<>(
+                Arrays.copyOfRange(buffer, strStartOffset, strStartOffset + strLength),
                 strStartOffset + strLength
         );
     }
