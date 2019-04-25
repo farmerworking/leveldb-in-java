@@ -9,10 +9,10 @@ public class InternalKey implements Sizable {
     // can be packed together into 64-bits.
     static long kMaxSequenceNumber = (Long.MAX_VALUE >> 8) - 1;
 
-    final String userKey;
+    public final String userKey;
     final char[] userKeyChar;
-    final long sequence;
-    final ValueType type;
+    public final long sequence;
+    public final ValueType type;
 
     public InternalKey(String userKey, long sequence, ValueType type) {
         this.userKey = userKey;
