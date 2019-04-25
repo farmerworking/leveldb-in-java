@@ -5,7 +5,7 @@ import com.farmerworking.leveldb.in.java.data.structure.Iterator;
 import com.farmerworking.leveldb.in.java.data.structure.skiplist.ISkipList;
 import com.farmerworking.leveldb.in.java.data.structure.skiplist.ISkipListIterator;
 
-public class MemtableIterator implements Iterator {
+public class MemtableIterator implements Iterator<InternalKey, String> {
     private ISkipListIterator<MemtableEntry> iter;
 
     public MemtableIterator(ISkipList<MemtableEntry> skipList) {
@@ -44,8 +44,8 @@ public class MemtableIterator implements Iterator {
     }
 
     @Override
-    public String key() {
-        return iter.key().internalKey.userKey;
+    public InternalKey key() {
+        return iter.key().internalKey;
     }
 
     @Override

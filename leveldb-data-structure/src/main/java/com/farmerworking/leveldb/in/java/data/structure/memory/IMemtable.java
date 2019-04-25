@@ -10,7 +10,7 @@ public interface IMemtable {
     // The caller must ensure that the underlying MemTable remains live
     // while the returned iterator is live.  The keys returned by this
     // iterator are internal keys encoded by AppendInternalKey
-    Iterator iterator();
+    Iterator<InternalKey, String> iterator();
 
     // Add an entry into memtable that maps key to value at the
     // specified sequence number and with the specified type.

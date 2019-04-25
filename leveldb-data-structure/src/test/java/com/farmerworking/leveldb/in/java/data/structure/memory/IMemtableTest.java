@@ -96,12 +96,12 @@ public abstract class IMemtableTest {
             memtable.add(1L, ValueType.kTypeValue, i + "", values[i]);
         }
 
-        Iterator iter = memtable.iterator();
+        Iterator<InternalKey, String> iter = memtable.iterator();
         iter.seekToFirst();
         assertTrue(iter.valid());
 
         for (int i = 0; i < values.length; i++) {
-            assertEquals(String.valueOf(i), iter.key());
+            assertEquals(String.valueOf(i), iter.key().userKey);
             assertEquals(values[i], iter.value());
             iter.next();
         }

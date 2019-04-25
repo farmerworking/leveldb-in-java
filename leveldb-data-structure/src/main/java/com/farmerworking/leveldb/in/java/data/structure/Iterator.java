@@ -2,7 +2,7 @@ package com.farmerworking.leveldb.in.java.data.structure;
 
 import com.farmerworking.leveldb.in.java.common.Status;
 
-public interface Iterator {
+public interface Iterator<K, V> {
     // An iterator is either positioned at a key/value pair, or
     // not valid.  This method returns true iff the iterator is valid.
     boolean valid();
@@ -32,11 +32,11 @@ public interface Iterator {
 
     // Return the key for the current entry
     // REQUIRES: Valid()
-    String key();
+    K key();
 
     // Return the value for the current entry
     // REQUIRES: Valid()
-    String value();
+    V value();
 
     // If an error has occurred, return it. Else return an ok status.
     Status status();
