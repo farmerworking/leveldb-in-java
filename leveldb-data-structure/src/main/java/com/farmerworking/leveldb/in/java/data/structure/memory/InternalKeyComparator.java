@@ -1,6 +1,6 @@
 package com.farmerworking.leveldb.in.java.data.structure.memory;
 
-import com.farmerworking.leveldb.in.java.data.structure.Comparator;
+import com.farmerworking.leveldb.in.java.api.Comparator;
 
 public class InternalKeyComparator {
     final Comparator userComparator;

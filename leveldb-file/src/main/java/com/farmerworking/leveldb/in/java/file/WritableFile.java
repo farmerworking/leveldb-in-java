@@ -1,6 +1,6 @@
 package com.farmerworking.leveldb.in.java.file;
 
-import com.farmerworking.leveldb.in.java.common.Status;
+import com.farmerworking.leveldb.in.java.api.Status;
 
 // A file abstraction for sequential writing.  The implementation
 // must provide buffering since callers may append small fragments

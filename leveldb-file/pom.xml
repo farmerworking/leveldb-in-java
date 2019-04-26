@@ -15,7 +15,7 @@
     <dependencies>
         <dependency>
             <groupId>com.farmerworking</groupId>
-            <artifactId>leveldb-common</artifactId>
+            <artifactId>leveldb-api</artifactId>
         </dependency>
     </dependencies>
 </project>

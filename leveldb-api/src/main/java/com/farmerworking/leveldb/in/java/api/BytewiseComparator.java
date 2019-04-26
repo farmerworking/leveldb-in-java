@@ -1,4 +1,4 @@
-package com.farmerworking.leveldb.in.java.data.structure;
+package com.farmerworking.leveldb.in.java.api;
 
 import java.util.Arrays;
 

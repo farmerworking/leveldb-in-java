@@ -1,6 +1,6 @@
 package com.farmerworking.leveldb.in.java.file;
 
-import com.farmerworking.leveldb.in.java.common.Status;
+import com.farmerworking.leveldb.in.java.api.Status;
 import javafx.util.Pair;
 
 // A file abstraction for randomly reading the contents of a file.

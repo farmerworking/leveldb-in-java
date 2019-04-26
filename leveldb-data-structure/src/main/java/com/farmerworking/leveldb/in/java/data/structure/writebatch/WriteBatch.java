@@ -1,7 +1,7 @@
 package com.farmerworking.leveldb.in.java.data.structure.writebatch;
 
 import com.farmerworking.leveldb.in.java.common.ICoding;
-import com.farmerworking.leveldb.in.java.common.Status;
+import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.data.structure.memory.ValueType;
 import com.farmerworking.leveldb.in.java.data.structure.skiplist.Sizable;
 

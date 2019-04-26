@@ -1,6 +1,6 @@
-package com.farmerworking.leveldb.in.java.data.structure;
+package com.farmerworking.leveldb.in.java.api;
 
-import com.farmerworking.leveldb.in.java.common.Status;
+import com.farmerworking.leveldb.in.java.api.Status;
 
 public interface Iterator<K, V> {
     // An iterator is either positioned at a key/value pair, or

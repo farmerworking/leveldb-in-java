@@ -1,16 +1,14 @@
 package com.farmerworking.leveldb.in.java.data.structure.writebatch;
 
-import com.farmerworking.leveldb.in.java.common.Status;
-import com.farmerworking.leveldb.in.java.data.structure.BytewiseComparator;
-import com.farmerworking.leveldb.in.java.data.structure.Iterator;
+import com.farmerworking.leveldb.in.java.api.Status;
+import com.farmerworking.leveldb.in.java.api.BytewiseComparator;
+import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.data.structure.memory.IMemtable;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
 import com.farmerworking.leveldb.in.java.data.structure.memory.Memtable;
 import org.junit.Test;
 
-import static com.farmerworking.leveldb.in.java.data.structure.memory.ValueType.kTypeDeletion;
-import static com.farmerworking.leveldb.in.java.data.structure.memory.ValueType.kTypeValue;
 import static org.junit.Assert.*;
 
 public class WriteBatchTest {

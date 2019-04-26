@@ -1,6 +1,6 @@
 package com.farmerworking.leveldb.in.java.data.structure.log;
 
-import com.farmerworking.leveldb.in.java.common.Status;
+import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.common.ICRC32C;
 import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;

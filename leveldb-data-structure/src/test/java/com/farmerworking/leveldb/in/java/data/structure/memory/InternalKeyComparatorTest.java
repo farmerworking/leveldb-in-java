@@ -1,6 +1,6 @@
 package com.farmerworking.leveldb.in.java.data.structure.memory;
 
-import com.farmerworking.leveldb.in.java.data.structure.BytewiseComparator;
+import com.farmerworking.leveldb.in.java.api.BytewiseComparator;
 import org.junit.Test;
 
 import static org.junit.Assert.*;

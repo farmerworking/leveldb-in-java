@@ -1,7 +1,7 @@
 package com.farmerworking.leveldb.in.java.data.structure.memory;
 
-import com.farmerworking.leveldb.in.java.common.Status;
-import com.farmerworking.leveldb.in.java.data.structure.Iterator;
+import com.farmerworking.leveldb.in.java.api.Status;
+import com.farmerworking.leveldb.in.java.api.Iterator;
 import javafx.util.Pair;
 
 public interface IMemtable {

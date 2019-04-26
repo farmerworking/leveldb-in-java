@@ -20,6 +20,7 @@
         <module>leveldb-common</module>
         <module>leveldb-data-structure</module>
         <module>leveldb-file</module>
+        <module>leveldb-api</module>
     </modules>
 
     <dependencyManagement>
@@ -42,6 +43,11 @@
             <dependency>
                 <groupId>com.farmerworking</groupId>
                 <artifactId>leveldb-file</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.farmerworking</groupId>
+                <artifactId>leveldb-api</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
         </dependencies>

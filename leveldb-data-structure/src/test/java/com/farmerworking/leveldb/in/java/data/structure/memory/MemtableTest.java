@@ -1,6 +1,6 @@
 package com.farmerworking.leveldb.in.java.data.structure.memory;
 
-import com.farmerworking.leveldb.in.java.data.structure.BytewiseComparator;
+import com.farmerworking.leveldb.in.java.api.BytewiseComparator;
 
 public class MemtableTest extends IMemtableTest {
     @Override
