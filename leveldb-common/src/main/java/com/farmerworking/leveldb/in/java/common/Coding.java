@@ -208,6 +208,16 @@ public class Coding implements ICoding {
         return FIXED_64_LENGTH;
     }
 
+    @Override
+    public int getMaxVarint32Length() {
+        return VAR_INT_32_MAX_LENGTH;
+    }
+
+    @Override
+    public int getMaxVarint64Length() {
+        return VAR_INT_64_MAX_LENGTH;
+    }
+
     private Pair<Long, Integer> decodeVarintInternal(char[] buffer, int offset, int limit, int shiftLimit) {
         long result = 0L;
         for (int shift = 0; shift <= shiftLimit && offset < limit; shift += 7) {

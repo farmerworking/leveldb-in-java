@@ -1,5 +1,6 @@
 package com.farmerworking.leveldb.in.java.data.structure.block;
 
+import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.data.structure.skiplist.Sizable;
 
 public interface IBlockBuilder extends Sizable {
@@ -12,4 +13,10 @@ public interface IBlockBuilder extends Sizable {
 
     // Reset the contents as if the BlockBuilder was just constructed.
     void reset();
+
+    boolean isEmpty();
+
+    static IBlockBuilder getDefaultImpl(Options options) {
+        return new BlockBuilder(options);
+    }
 }

@@ -71,6 +71,11 @@ public class BlockBuilder implements IBlockBuilder {
     }
 
     @Override
+    public boolean isEmpty() {
+        return this.buffer.length() == 0;
+    }
+
+    @Override
     public int memoryUsage() {
         return (buffer.length() +                                                           // Raw data buffer
                 restartOffsets.size() * ICoding.getInstance().getFixed32Length() +          // Restart array

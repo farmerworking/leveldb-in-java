@@ -75,4 +75,8 @@ public interface ICoding {
     int getFixed32Length();
 
     int getFixed64Length();
+
+    int getMaxVarint32Length();
+
+    int getMaxVarint64Length();
 }
