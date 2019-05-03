@@ -1,12 +1,11 @@
 package com.farmerworking.leveldb.in.java.data.structure.log;
 
 import com.farmerworking.leveldb.in.java.api.Status;
+import com.farmerworking.leveldb.in.java.common.ByteUtils;
 import com.farmerworking.leveldb.in.java.common.ICRC32C;
 import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
 import javafx.util.Pair;
-
-import java.nio.charset.StandardCharsets;
 
 public class LogReader implements ILogReader {
     private SequentialFile file;
@@ -228,7 +227,7 @@ public class LogReader implements ILogReader {
             char[] payload = buffer.getChars(RecordType.kHeaderSize - 1, length + 1);
             if (checksum) {
                 int expectedCrc = ICRC32C.getInstance().unmask(ICoding.getInstance().decodeFixed32(header, 0));
-                byte[] bytes = new String(payload).getBytes(StandardCharsets.UTF_8);
+                byte[] bytes = ByteUtils.toByteArray(payload, 0, payload.length);
                 int actualCrc = ICRC32C.getInstance().value(bytes, 0, bytes.length);
                 if (actualCrc != expectedCrc) {
                     // Drop the rest of the buffer since "length" itself may have

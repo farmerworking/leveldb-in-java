@@ -1,6 +1,7 @@
 package com.farmerworking.leveldb.in.java.data.structure.log;
 
 import com.farmerworking.leveldb.in.java.api.Status;
+import com.farmerworking.leveldb.in.java.common.ByteUtils;
 import com.farmerworking.leveldb.in.java.common.ICRC32C;
 import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
@@ -9,7 +10,6 @@ import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Random;
 
 import static org.junit.Assert.*;
@@ -212,7 +212,7 @@ public abstract class ILogTest {
         // Compute crc of type/len/data
         char[] chars = new char[1 + len];
         dest.getContent().getChars(header_offset + 6, header_offset + 6 + 1 + len, chars, 0);
-        byte[] bytes = new String(chars).getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = ByteUtils.toByteArray(chars, 0, chars.length);
         int crc = getCrc32CImpl().value(bytes, 0, bytes.length);
         crc = getCrc32CImpl().mask(crc);
 

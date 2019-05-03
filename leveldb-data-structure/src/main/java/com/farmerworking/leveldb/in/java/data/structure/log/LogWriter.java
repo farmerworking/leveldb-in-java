@@ -1,11 +1,10 @@
 package com.farmerworking.leveldb.in.java.data.structure.log;
 
 import com.farmerworking.leveldb.in.java.api.Status;
+import com.farmerworking.leveldb.in.java.common.ByteUtils;
 import com.farmerworking.leveldb.in.java.common.ICRC32C;
 import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
-
-import java.nio.charset.StandardCharsets;
 
 public class LogWriter implements ILogWriter {
     // used for padding
@@ -86,7 +85,8 @@ public class LogWriter implements ILogWriter {
         assert blockOffset + RecordType.kHeaderSize + data.length() <= RecordType.kBlockSize;
 
         // checksum
-        byte[] bytes = String.valueOf(type.getValue()).concat(data).getBytes(StandardCharsets.UTF_8);
+        char[] chars = String.valueOf(type.getValue()).concat(data).toCharArray();
+        byte[] bytes = ByteUtils.toByteArray(chars, 0, chars.length);
         int crc = ICRC32C.getInstance().mask(ICRC32C.getInstance().value(bytes, 0, bytes.length));
         ICoding.getInstance().encodeFixed32(header, 0, crc);
 

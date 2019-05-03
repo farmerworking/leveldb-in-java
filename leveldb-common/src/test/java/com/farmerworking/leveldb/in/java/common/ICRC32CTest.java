@@ -2,8 +2,6 @@ package com.farmerworking.leveldb.in.java.common;
 
 import org.junit.Test;
 
-import java.nio.charset.StandardCharsets;
-
 import static org.junit.Assert.*;
 
 public abstract class ICRC32CTest {
@@ -79,12 +77,12 @@ public abstract class ICRC32CTest {
     }
 
     private int value(String s) {
-        byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = ByteUtils.toByteArray(s.toCharArray(), 0, s.length());
         return getImpl().value(bytes, 0, bytes.length);
     }
 
     private int extend(int crc, String s) {
-        byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = ByteUtils.toByteArray(s.toCharArray(), 0, s.length());
         return getImpl().extend(crc, bytes, 0, bytes.length);
     }
 }
