@@ -5,4 +5,8 @@ import com.farmerworking.leveldb.in.java.api.Iterator;
 
 public interface IBlockReader {
     Iterator<String, String> iterator(Comparator comparator);
+
+    public static IBlockReader getDefaultImpl(String blockContent) {
+        return new BlockReader(blockContent);
+    }
 }
