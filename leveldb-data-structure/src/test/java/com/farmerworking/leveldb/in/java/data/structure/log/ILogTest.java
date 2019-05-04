@@ -4,6 +4,8 @@ import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.common.ByteUtils;
 import com.farmerworking.leveldb.in.java.common.ICRC32C;
 import com.farmerworking.leveldb.in.java.common.ICoding;
+import com.farmerworking.leveldb.in.java.data.structure.utils.StringDest;
+import com.farmerworking.leveldb.in.java.data.structure.utils.StringSource;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
 import javafx.util.Pair;
@@ -60,85 +62,6 @@ public abstract class ILogTest {
         return String.valueOf(n);
     }
 
-    private class StringDest implements WritableFile {
-        StringBuilder builder = new StringBuilder();
-
-        @Override
-        public Status append(String data) {
-            builder.append(data);
-            return Status.OK();
-        }
-
-        public void replace(int index, char newChar) {
-            builder.setCharAt(index, newChar);
-        }
-
-        public int getLength() {
-            return builder.length();
-        }
-
-        public String getContent() {
-            return builder.toString();
-        }
-
-        public void setContent(String content) {
-            this.builder = new StringBuilder(content);
-        }
-
-        @Override
-        public Status flush() { return Status.OK(); }
-        @Override
-        public Status close() { return Status.OK(); }
-        @Override
-        public Status sync() { return Status.OK(); }
-    }
-
-    private class StringSource implements SequentialFile {
-        public String contents = "";
-        public boolean forceError;
-        public boolean returnedPartial;
-
-        public StringSource() {
-            this.forceError = false;
-            this.returnedPartial = false;
-        }
-
-        @Override
-        public Pair<Status, String> read(int n) {
-            assertTrue("must not Read() after eof/error", !returnedPartial);
-
-            if (forceError) {
-                forceError = false;
-                returnedPartial = true;
-                return new Pair<>(Status.Corruption("read error"), "");
-            }
-
-            if (contents.length() < n) {
-                n = contents.length();
-                returnedPartial = true;
-            }
-            String result = contents.substring(0, n);
-            contents = contents.substring(n);
-            return new Pair<>(Status.OK(), result);
-        }
-
-        @Override
-        public Status skip(long n) {
-            if (forceError) {
-                forceError = false;
-                return Status.Corruption("skip error");
-            }
-
-            if (n > contents.length()) {
-                contents = "";
-                return Status.NotFound("in-memory file skipped past end");
-            }
-
-            contents = contents.substring((int) n);
-            return Status.OK();
-        }
-    }
-
     private class ReportCollector implements ILogReporter {
         public long droppedBytes;
         public String message = "";
@@ -183,7 +106,7 @@ public abstract class ILogTest {
     public String read() {
         if (!reading) {
             reading = true;
-            source.contents = dest.getContent();
+            source.setContents(dest.getContent());
         }
 
         Pair<Boolean, String> readResult = reader.readRecord();
@@ -222,7 +145,7 @@ public abstract class ILogTest {
     }
 
     void forceError() {
-        source.forceError = true;
+        source.setForceError(true);
     }
 
     public long droppedBytes() {
@@ -256,7 +179,7 @@ public abstract class ILogTest {
     void checkOffsetPastEndReturnsNoRecords(int offset_past_end) {
         writeInitialOffsetLog();
         reading = true;
-        source.contents = dest.getContent();
+        source.setContents(dest.getContent());
         ILogReader offset_reader = getLogReaderImpl(source, report, true, writtenBytes() + offset_past_end);
         Pair<Boolean, String> readResult = offset_reader.readRecord();
         assertTrue(!readResult.getKey());
@@ -265,7 +188,7 @@ public abstract class ILogTest {
     public void checkInitialOffsetRecord(int initialOffset, int expectedRecordOffset) {
         writeInitialOffsetLog();
         reading = true;
-        source.contents = dest.getContent();
+        source.setContents(dest.getContent());
         ILogReader offsetReader = getLogReaderImpl(source, report, true, initialOffset);
 
         // Read all records from expected_record_offset through the last one.
