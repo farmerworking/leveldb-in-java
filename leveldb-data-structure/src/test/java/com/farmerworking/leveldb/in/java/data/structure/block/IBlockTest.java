@@ -1,7 +1,9 @@
 package com.farmerworking.leveldb.in.java.data.structure.block;
 
+import com.farmerworking.leveldb.in.java.api.BytewiseComparator;
 import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.common.ICoding;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -221,6 +223,19 @@ public abstract class IBlockTest {
         iterator.seekToFirst();
         assertFalse(iterator.valid());
         assertTrue(iterator.status().isOk());
+    }
+
+    @Test
+    public void testZeroRestartPointsInBlock() {
+        String contents = StringUtils.repeat((char)0, 4);
+        IBlockReader block = IBlockReader.getDefaultImpl(contents);
+        Iterator iter = block.iterator(new BytewiseComparator());
+        iter.seekToFirst();
+        assertTrue(!iter.valid());
+        iter.seekToLast();
+        assertTrue(!iter.valid());
+        iter.seek("foo");
+        assertTrue(!iter.valid());
     }
 
     protected abstract IBlockBuilder getBlockBuilder(Options options);

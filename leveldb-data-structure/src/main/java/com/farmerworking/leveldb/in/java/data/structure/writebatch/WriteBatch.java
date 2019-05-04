@@ -72,19 +72,19 @@ public class WriteBatch {
         return Status.OK();
     }
 
-    int getCount() {
+    public int getCount() {
         return commands.size();
     }
 
-    long getSequence() {
+    public long getSequence() {
         return sequence;
     }
 
-    void setSequence(long sequence) {
+    public void setSequence(long sequence) {
         this.sequence = sequence;
     }
 
-    void append(WriteBatch writeBatch) {
+    public void append(WriteBatch writeBatch) {
         this.commands.addAll(writeBatch.commands);
     }
 }

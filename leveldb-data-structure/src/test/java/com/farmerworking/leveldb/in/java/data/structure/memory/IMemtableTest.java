@@ -2,6 +2,8 @@ package com.farmerworking.leveldb.in.java.data.structure.memory;
 
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.api.Iterator;
+import com.farmerworking.leveldb.in.java.data.structure.writebatch.MemTableInserter;
+import com.farmerworking.leveldb.in.java.data.structure.writebatch.WriteBatch;
 import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
@@ -118,5 +120,27 @@ public abstract class IMemtableTest {
         iter.next();
         assertTrue(iter.valid());
         assertEquals("4", iter.value());
+    }
+
+    @Test
+    public void testSimple() {
+        IMemtable memtable = getImpl();
+        WriteBatch batch = new WriteBatch();
+        batch.setSequence(100);
+        batch.put("k1", "v1");
+        batch.put("k2", "v2");
+        batch.put("k3", "v3");
+        batch.put("largekey", "vlarge");
+
+        MemTableInserter memTableInserter = new MemTableInserter(batch.getSequence(), memtable);
+        Status status = batch.iterate(memTableInserter);
+        assertTrue(status.isOk());
+
+        Iterator<InternalKey, String> iter = memtable.iterator();
+        iter.seekToFirst();
+        while (iter.valid()) {
+            System.out.println(String.format("key: '%s' -> '%s'", iter.key().userKey, iter.value()));
+            iter.next();
+        }
     }
 }
