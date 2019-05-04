@@ -1,5 +1,6 @@
 package com.farmerworking.leveldb.in.java.data.structure.memory;
 
+import com.farmerworking.leveldb.in.java.api.Comparator;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.api.Iterator;
 import javafx.util.Pair;
@@ -26,4 +27,8 @@ public interface IMemtable {
     // Returns an estimate of the number of bytes of data in use by this
     // data structure. It is safe to call when MemTable is being modified.
     int approximateMemoryUsage();
+
+    public static IMemtable getDefaultImpl(Comparator comparator) {
+        return new Memtable(new InternalKeyComparator(comparator));
+    }
 }
