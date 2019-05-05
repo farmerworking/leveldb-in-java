@@ -2,6 +2,7 @@ package com.farmerworking.leveldb.in.java.data.structure.table;
 
 import com.farmerworking.leveldb.in.java.api.BytewiseComparator;
 import com.farmerworking.leveldb.in.java.api.CompressionType;
+import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.data.structure.utils.TestUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -66,6 +67,22 @@ public class ITableTest {
         assertTrue(between(constructor.approximateOffsetOf("k04"), min_z, max_z));
         // Have now emitted two large compressible strings, so adjust expected offset.
         assertTrue(between(constructor.approximateOffsetOf("xyz"), 2 * min_z, 2 * max_z));
+    }
+
+    @Test
+    // before bugfix, iterator will report corrupted compressed block contents
+    public void testUncompressNotIncludeCrcAndType() {
+        TableConstructor constructor = new TableConstructor(new BytewiseComparator());
+        constructor.add("k04", TestUtils.compressibleString(0.25, 10000));
+
+        Options options = new Options();
+        options.setBlockSize(1024);
+        options.setCompression(CompressionType.kSnappyCompression);
+        constructor.finish(options);
+
+        Iterator<String, String> iterator = constructor.iterator();
+        iterator.seekToFirst();
+        assertTrue(iterator.status().toString(), iterator.status().isOk());
     }
 
     static boolean between(long value, long low, long high) {

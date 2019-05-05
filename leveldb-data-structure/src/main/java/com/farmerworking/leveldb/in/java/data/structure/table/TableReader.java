@@ -177,7 +177,7 @@ public class TableReader implements ITableReader {
             case kNoCompression:
                 return new Pair<>(Status.OK(), new String(chars, 0, size));
             case kSnappyCompression:
-                byte[] bytes = ByteUtils.toByteArray(chars, 0, chars.length);
+                byte[] bytes = ByteUtils.toByteArray(chars, 0, size);
                 try {
                     byte[] uncompressedBytes = Snappy.uncompress(bytes);
                     return new Pair<>(Status.OK(), new String(ByteUtils.toCharArray(uncompressedBytes, 0, uncompressedBytes.length)));
