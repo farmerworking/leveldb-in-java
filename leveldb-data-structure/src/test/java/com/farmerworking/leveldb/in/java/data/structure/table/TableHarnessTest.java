@@ -1,14 +1,12 @@
-package com.farmerworking.leveldb.in.java.data.structure.block;
+package com.farmerworking.leveldb.in.java.data.structure.table;
 
-import com.farmerworking.leveldb.in.java.api.Comparator;
-import com.farmerworking.leveldb.in.java.data.structure.harness.Constructor;
-import com.farmerworking.leveldb.in.java.data.structure.harness.HarnessTestRunner;
-import com.farmerworking.leveldb.in.java.data.structure.harness.TestArg;
+import com.farmerworking.leveldb.in.java.api.*;
+import com.farmerworking.leveldb.in.java.data.structure.harness.*;
 import com.google.common.collect.Lists;
 
 import java.util.List;
 
-public class BlockHarnessTestRunner extends HarnessTestRunner  {
+public class TableHarnessTest extends HarnessTest {
     @Override
     protected List<TestArg> getTestArgList() {
         return Lists.newArrayList(
@@ -23,6 +21,6 @@ public class BlockHarnessTestRunner extends HarnessTestRunner  {
 
     @Override
     protected Constructor getConstructor(Comparator comparator) {
-        return new BlockConstructor(comparator);
+        return new TableConstructor(comparator);
     }
 }
