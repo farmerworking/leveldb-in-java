@@ -9,6 +9,9 @@ import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.data.structure.block.IBlockBuilder;
 import com.farmerworking.leveldb.in.java.data.structure.block.IFilterBlockBuilder;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
+import org.xerial.snappy.Snappy;
+
+import java.io.IOException;
 
 public class TableBuilder implements ITableBuilder {
     public static int kBlockTrailerSize = 1 + ICoding.getInstance().getFixed32Length();
@@ -127,7 +130,26 @@ public class TableBuilder implements ITableBuilder {
     private void writeBlock(IBlockBuilder dataBlock, BlockHandle handle) {
         assert ok();
         // todo: support snappy compression
-        writeRawBlock(dataBlock.finish(), CompressionType.kNoCompression, handle);
+        CompressionType type = this.options.getCompression();
+        String content = dataBlock.finish();
+        switch (type) {
+            case kNoCompression:
+                break;
+            case kSnappyCompression:
+                try {
+                    byte[] bytes = Snappy.compress(ByteUtils.toByteArray(content, 0, content.length()));
+                    if (bytes.length < content.length() - (content.length() / 8)) {
+                        content = new String(ByteUtils.toCharArray(bytes, 0, bytes.length));
+                    } else {
+                        type = CompressionType.kNoCompression;
+                    }
+                } catch (IOException e) {
+                    type = CompressionType.kNoCompression;
+                }
+                break;
+        }
+
+        writeRawBlock(content, type, handle);
         dataBlock.reset();
     }
 

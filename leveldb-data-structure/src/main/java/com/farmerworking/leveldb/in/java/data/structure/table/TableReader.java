@@ -10,6 +10,9 @@ import com.farmerworking.leveldb.in.java.data.structure.two.level.iterator.Index
 import com.farmerworking.leveldb.in.java.data.structure.two.level.iterator.TwoLevelIterator;
 import com.farmerworking.leveldb.in.java.file.RandomAccessFile;
 import javafx.util.Pair;
+import org.xerial.snappy.Snappy;
+
+import java.io.IOException;
 
 
 public class TableReader implements ITableReader {
@@ -174,8 +177,13 @@ public class TableReader implements ITableReader {
             case kNoCompression:
                 return new Pair<>(Status.OK(), new String(chars, 0, size));
             case kSnappyCompression:
-                // todo
-                return new Pair<>(Status.OK(), null);
+                byte[] bytes = ByteUtils.toByteArray(chars, 0, chars.length);
+                try {
+                    byte[] uncompressedBytes = Snappy.uncompress(bytes);
+                    return new Pair<>(Status.OK(), new String(ByteUtils.toCharArray(uncompressedBytes, 0, uncompressedBytes.length)));
+                } catch (IOException e) {
+                    return new Pair<>(Status.Corruption("corrupted compressed block contents"), null);
+                }
             default:
                 return new Pair<>(Status.Corruption("unknown compression type"), null);
         }

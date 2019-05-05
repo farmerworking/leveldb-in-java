@@ -17,4 +17,12 @@ public class ByteUtils {
         }
         return bytes;
     }
+
+    public static char[] toCharArray(byte[] bytes, int offset, int length) {
+        char[] chars = new char[length];
+        for (int i = offset, j = 0; i < offset + length; i++, j++) {
+            chars[j] = (char) bytes[i];
+        }
+        return chars;
+    }
 }

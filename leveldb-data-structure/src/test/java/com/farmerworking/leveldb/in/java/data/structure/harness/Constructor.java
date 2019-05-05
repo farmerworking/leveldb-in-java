@@ -28,7 +28,7 @@ public abstract class Constructor {
         getData().put(key, value);
     }
 
-    List<String> finish(Options options) {
+    public List<String> finish(Options options) {
         List<String> result = new ArrayList<>(getData().keySet());
         Status status = finishImpl(options, getData());
         assert status.isOk();

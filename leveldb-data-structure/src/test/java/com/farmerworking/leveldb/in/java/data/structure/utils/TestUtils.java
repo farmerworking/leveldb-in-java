@@ -29,4 +29,17 @@ public class TestUtils {
         }
         return builder.toString();
     }
+
+    public static String compressibleString(double compressed_fraction, int len) {
+        int raw = (int)(len * compressed_fraction);
+        if (raw < 1) raw = 1;
+        String s = randomString(raw);
+
+        // Duplicate the random data until we have filled "len" bytes
+        StringBuilder builder = new StringBuilder();
+        while (builder.length() < len) {
+            builder.append(s);
+        }
+        return builder.substring(0, len);
+    }
 }
