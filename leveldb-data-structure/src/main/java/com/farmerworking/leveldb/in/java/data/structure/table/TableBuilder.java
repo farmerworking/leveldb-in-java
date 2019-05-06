@@ -129,7 +129,6 @@ public class TableBuilder implements ITableBuilder {
     //    crc: uint32
     private void writeBlock(IBlockBuilder dataBlock, BlockHandle handle) {
         assert ok();
-        // todo: support snappy compression
         CompressionType type = this.options.getCompression();
         String content = dataBlock.finish();
         switch (type) {

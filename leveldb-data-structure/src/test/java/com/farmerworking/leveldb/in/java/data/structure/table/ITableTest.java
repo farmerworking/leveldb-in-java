@@ -1,12 +1,15 @@
 package com.farmerworking.leveldb.in.java.data.structure.table;
 
-import com.farmerworking.leveldb.in.java.api.BytewiseComparator;
-import com.farmerworking.leveldb.in.java.api.CompressionType;
-import com.farmerworking.leveldb.in.java.api.Iterator;
-import com.farmerworking.leveldb.in.java.api.Options;
+import com.farmerworking.leveldb.in.java.api.*;
+import com.farmerworking.leveldb.in.java.data.structure.cache.ShardedLRUCache;
+import com.farmerworking.leveldb.in.java.data.structure.cache.TestDeleter;
+import com.farmerworking.leveldb.in.java.data.structure.harness.Harness;
 import com.farmerworking.leveldb.in.java.data.structure.utils.TestUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.*;
 
@@ -83,6 +86,29 @@ public class ITableTest {
         Iterator<String, String> iterator = constructor.iterator();
         iterator.seekToFirst();
         assertTrue(iterator.status().toString(), iterator.status().isOk());
+    }
+
+    @Test
+    public void testBlockCacheHandleRelease() {
+        Cache cache = new ShardedLRUCache(10 * 2 * 4);
+
+        Options options = new Options();
+        options.setBlockSize(10);
+        options.setBlockCache(cache);
+
+        TableConstructor constructor = new TableConstructor(new BytewiseComparator(), options);
+        for (int i = 0; i < 100; i++) {
+            constructor.add(TestUtils.randomKey(5), TestUtils.randomString(10));
+        }
+
+        List<String> keys = constructor.finish(options);
+        Map<String, String> data = constructor.getData();
+
+        TestDeleter<Object> deleter = new TestDeleter<>();
+        Iterator<String, String> iterator = constructor.iterator(deleter);
+        Harness.testForwardScan(keys, data, iterator);
+
+        assertFalse(deleter.deletedKeys.isEmpty());
     }
 
     static boolean between(long value, long low, long high) {

@@ -23,6 +23,7 @@ public class TableReader implements ITableReader {
     private IBlockReader indexBlockReader;
     private IFilterBlockReader filter;
     private String filterData;
+    private long cacheId;
 
     public Status open(Options options, RandomAccessFile file, long size) {
         if (size < Footer.kEncodedLength) {
@@ -55,7 +56,7 @@ public class TableReader implements ITableReader {
             this.file = file;
             this.metaIndexHandle = footer.getMetaIndexBlockHandle();
             this.indexBlockReader = IBlockReader.getDefaultImpl(pair.getValue());
-            // todo: cache
+            this.cacheId = options.getBlockCache() == null ? 0 : options.getBlockCache().newId();
             this.filterData = null;
             this.filter = null;
             this.readMeta();
@@ -69,7 +70,15 @@ public class TableReader implements ITableReader {
         return new TwoLevelIterator(
                 this.indexBlockReader.iterator(this.options.getComparator()),
                 readOptions,
-                new TableIndexTransfer(this.file, this.options));
+                new TableIndexTransfer(this.file, this.options, this.cacheId, null));
+    }
+
+    // for unit test only
+    public Iterator<String, String> iterator(ReadOptions readOptions, Deleter deleter) {
+        return new TwoLevelIterator(
+                this.indexBlockReader.iterator(this.options.getComparator()),
+                readOptions,
+                new TableIndexTransfer(this.file, this.options, this.cacheId, deleter));
     }
 
     @Override

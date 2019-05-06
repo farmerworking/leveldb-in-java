@@ -58,6 +58,14 @@ public class Options {
     // Default: false
     private boolean paranoidChecks = false;
 
+    // Control over blocks (user data is stored in a set of blocks, and
+    // a block is the unit of reading from disk).
+
+    // If non-null, use the specified cache for blocks.
+    // If null, leveldb will automatically create and use an 8MB internal cache.
+    // Default: nullptr
+    private Cache blockCache = null;
+
     public Options() {}
 
     public Options(Options options) {

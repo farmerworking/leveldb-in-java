@@ -48,4 +48,9 @@ public class BlockReader implements IBlockReader {
             return new BlockIterator(comparator, data, restartOffset, getNumRestarts());
         }
     }
+
+    @Override
+    public int memoryUsage() {
+        return data.length;
+    }
 }
