@@ -47,7 +47,9 @@ class LRUCacheNode<V> implements CacheHandle<V> {
 
     public void delete() {
         assert !this.inCache;
-        deleter.delete(key, value);
+        if (deleter != null) {
+            deleter.delete(key, value);
+        }
     }
 
     public boolean inLRU() {
