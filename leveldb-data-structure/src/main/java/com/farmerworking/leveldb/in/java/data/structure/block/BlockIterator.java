@@ -1,15 +1,12 @@
 package com.farmerworking.leveldb.in.java.data.structure.block;
 
 import com.farmerworking.leveldb.in.java.api.Comparator;
-import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.common.ICoding;
+import com.farmerworking.leveldb.in.java.data.structure.iterator.AbstractIterator;
 import javafx.util.Pair;
 
-import java.nio.CharBuffer;
-import java.util.Arrays;
-
-public class BlockIterator implements Iterator<String, String> {
+public class BlockIterator extends AbstractIterator<String, String> {
     private Comparator comparator;
     private char[] data;
 
@@ -43,17 +40,20 @@ public class BlockIterator implements Iterator<String, String> {
 
     @Override
     public boolean valid() {
+        assert !this.closed;
         return current < restartOffset;
     }
 
     @Override
     public void seekToFirst() {
+        assert !this.closed;
         seekToRestartPoint(0);
         parseNextKey();
     }
 
     @Override
     public void seekToLast() {
+        assert !this.closed;
         seekToRestartPoint(numRestarts - 1);
         while (parseNextKey() && nextEntryOffset() < restartOffset) {
             // Keep skipping
@@ -62,6 +62,7 @@ public class BlockIterator implements Iterator<String, String> {
 
     @Override
     public void seek(String target) {
+        assert !this.closed;
         // Binary search in restart array to find the last restart point
         // with a key < target
         int left = 0;
@@ -110,12 +111,14 @@ public class BlockIterator implements Iterator<String, String> {
 
     @Override
     public void next() {
+        assert !this.closed;
         assert valid();
         parseNextKey();
     }
 
     @Override
     public void prev() {
+        assert !this.closed;
         assert valid();
 
         // Scan backwards to a restart point before current_
@@ -138,18 +141,21 @@ public class BlockIterator implements Iterator<String, String> {
 
     @Override
     public String key() {
+        assert !this.closed;
         assert(valid());
         return new String(key);
     }
 
     @Override
     public String value() {
+        assert !this.closed;
         assert(valid());
         return new String(data, value.getKey(), value.getValue());
     }
 
     @Override
     public Status status() {
+        assert !this.closed;
         return status;
     }
 

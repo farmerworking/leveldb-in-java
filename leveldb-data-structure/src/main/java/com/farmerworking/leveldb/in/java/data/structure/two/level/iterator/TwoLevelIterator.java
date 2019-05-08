@@ -3,6 +3,8 @@ package com.farmerworking.leveldb.in.java.data.structure.two.level.iterator;
 import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.api.ReadOptions;
 import com.farmerworking.leveldb.in.java.api.Status;
+import com.farmerworking.leveldb.in.java.data.structure.block.BlockIterator;
+import com.farmerworking.leveldb.in.java.data.structure.iterator.AbstractIterator;
 
 // A two-level iterator contains an index iterator whose values point
 // to a sequence of blocks where each block is itself a sequence of
@@ -12,7 +14,7 @@ import com.farmerworking.leveldb.in.java.api.Status;
 //
 // Uses a supplied function to convert an index_iter value into
 // an iterator over the contents of the corresponding block.
-public class TwoLevelIterator implements Iterator<String, String> {
+public class TwoLevelIterator extends AbstractIterator<String, String> {
     private Iterator<String, String> indexIterator;
     private Iterator<String, String> dataIterator;
     private String dataBlockHandleValue;
@@ -31,6 +33,7 @@ public class TwoLevelIterator implements Iterator<String, String> {
 
     @Override
     public boolean valid() {
+        assert !this.closed;
         if (dataIterator != null) {
             return dataIterator.valid();
         } else {
@@ -40,6 +43,7 @@ public class TwoLevelIterator implements Iterator<String, String> {
 
     @Override
     public void seekToFirst() {
+        assert !this.closed;
         indexIterator.seekToFirst();
         initDataBlock();
         if (dataIterator != null) {
@@ -50,6 +54,7 @@ public class TwoLevelIterator implements Iterator<String, String> {
 
     @Override
     public void seekToLast() {
+        assert !this.closed;
         indexIterator.seekToLast();
         initDataBlock();
         if (dataIterator != null) {
@@ -60,6 +65,7 @@ public class TwoLevelIterator implements Iterator<String, String> {
 
     @Override
     public void seek(String target) {
+        assert !this.closed;
         indexIterator.seek(target);
         initDataBlock();
         if (dataIterator != null) {
@@ -70,6 +76,7 @@ public class TwoLevelIterator implements Iterator<String, String> {
 
     @Override
     public void next() {
+        assert !this.closed;
         assert valid();
         dataIterator.next();
         skipEmptyDataBlocksForward();
@@ -77,6 +84,7 @@ public class TwoLevelIterator implements Iterator<String, String> {
 
     @Override
     public void prev() {
+        assert !this.closed;
         assert valid();
         dataIterator.prev();
         skipEmptyDataBlocksBackward();
@@ -84,18 +92,21 @@ public class TwoLevelIterator implements Iterator<String, String> {
 
     @Override
     public String key() {
+        assert !this.closed;
         assert valid();
         return dataIterator.key();
     }
 
     @Override
     public String value() {
+        assert !this.closed;
         assert valid();
         return dataIterator.value();
     }
 
     @Override
     public Status status() {
+        assert !this.closed;
         if (indexIterator.status().isNotOk()) {
             return indexIterator.status();
         } else if (dataIterator != null && dataIterator.status().isNotOk()) {
@@ -154,6 +165,10 @@ public class TwoLevelIterator implements Iterator<String, String> {
     private void setDataIterator(Iterator<String, String> dataIterator) {
         if (this.dataIterator != null && this.status.isOk() && this.dataIterator.status().isNotOk()) {
             this.status = this.dataIterator.status();
+        }
+
+        if (this.dataIterator != null && this.dataIterator instanceof BlockIterator) {
+            ((BlockIterator) this.dataIterator).close();
         }
         this.dataIterator = dataIterator;
     }

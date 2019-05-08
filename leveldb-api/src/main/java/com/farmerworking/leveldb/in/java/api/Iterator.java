@@ -38,4 +38,10 @@ public interface Iterator<K, V> {
 
     // If an error has occurred, return it. Else return an ok status.
     Status status();
+
+    // call close to release resource if iterator will not be used again
+    void close();
+
+    // register clean up callback
+    void registerCleanup(Runnable runnable);
 }
