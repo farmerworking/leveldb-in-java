@@ -167,8 +167,8 @@ public class TwoLevelIterator extends AbstractIterator<String, String> {
             this.status = this.dataIterator.status();
         }
 
-        if (this.dataIterator != null && this.dataIterator instanceof BlockIterator) {
-            ((BlockIterator) this.dataIterator).close();
+        if (this.dataIterator != null) {
+            this.dataIterator.close();
         }
         this.dataIterator = dataIterator;
     }

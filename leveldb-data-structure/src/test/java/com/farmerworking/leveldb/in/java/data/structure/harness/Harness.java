@@ -41,7 +41,7 @@ public class Harness {
         List<String> keys = constructor.finish(this.options);
         Map<String, String> data = constructor.getData();
 
-        testForwardScan(keys, data);
+        testForwardScan(keys, data, constructor.iterator());
         testBackwardScan(keys, data);
         testRandomAccess(random, keys, data);
     }
@@ -182,8 +182,7 @@ public class Harness {
         assertTrue(!iter.valid());
     }
 
-    private void testForwardScan(List<String> keys, Map<String, String> data) {
-        Iterator<String, String> iter = constructor.iterator();
+    public static void testForwardScan(List<String> keys, Map<String, String> data, Iterator<String, String> iter) {
         assertTrue(!iter.valid());
         iter.seekToFirst();
         for(String key : keys) {
@@ -194,7 +193,7 @@ public class Harness {
         assertTrue(!iter.valid());
     }
 
-    private String toString(Iterator<String, String> iter) {
+    private static String toString(Iterator<String, String> iter) {
         if (!iter.valid()) {
             return "END";
         } else {
@@ -202,7 +201,7 @@ public class Harness {
         }
     }
 
-    private String toString(Integer index, List<String> keys, Map<String, String> data) {
+    private static String toString(Integer index, List<String> keys, Map<String, String> data) {
         if (index >= keys.size() || index < 0) {
             return "END";
         } else {
@@ -210,7 +209,7 @@ public class Harness {
         }
     }
 
-    private String toString(String key, String value) {
+    private static String toString(String key, String value) {
         return "'" + key + "->" + value + "'";
     }
 }

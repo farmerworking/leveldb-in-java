@@ -2,7 +2,6 @@ package com.farmerworking.leveldb.in.java.data.structure.cache;
 
 import com.farmerworking.leveldb.in.java.api.Cache;
 import com.farmerworking.leveldb.in.java.api.CacheHandle;
-import com.farmerworking.leveldb.in.java.api.Deleter;
 import com.farmerworking.leveldb.in.java.common.ICoding;
 import org.junit.Before;
 import org.junit.Test;
@@ -12,26 +11,16 @@ import java.util.Vector;
 import static org.junit.Assert.*;
 
 public abstract class CacheTest {
-    class TestDeleter implements Deleter<Integer> {
-        Vector<Integer> deletedKeys = new Vector<>();
-        Vector<Integer> deletedValues = new Vector<>();
-
-        @Override
-        public void delete(String key, Integer value) {
-            deletedKeys.add(decodeKey(key));
-            deletedValues.add(value);
-        }
-    }
 
     private static int kCacheSize = 1000;
     Cache<Integer> cache;
-    TestDeleter deleter;
+    TestDeleter<Integer> deleter;
 
     protected abstract Cache<Integer> getImpl(int capacity);
 
     @Before
     public void setUp() throws Exception {
-        deleter = new TestDeleter();
+        deleter = new TestDeleter<>();
         cache = getImpl(kCacheSize);
     }
 
@@ -232,7 +221,7 @@ public abstract class CacheTest {
         return new String(buffer);
     }
 
-    private int decodeKey(String s) {
+    public static int decodeKey(String s) {
         char[] buffer = s.toCharArray();
         return ICoding.getInstance().decodeFixed32(buffer, 0);
     }
