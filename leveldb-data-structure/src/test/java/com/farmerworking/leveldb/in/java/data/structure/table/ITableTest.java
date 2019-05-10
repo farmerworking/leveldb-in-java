@@ -4,7 +4,7 @@ import com.farmerworking.leveldb.in.java.api.*;
 import com.farmerworking.leveldb.in.java.data.structure.cache.ShardedLRUCache;
 import com.farmerworking.leveldb.in.java.data.structure.cache.TestDeleter;
 import com.farmerworking.leveldb.in.java.data.structure.harness.Harness;
-import com.farmerworking.leveldb.in.java.data.structure.utils.TestUtils;
+import com.farmerworking.leveldb.in.java.common.TestUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
 

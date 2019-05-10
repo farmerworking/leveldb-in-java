@@ -1,7 +1,7 @@
 package com.farmerworking.leveldb.in.java.data.structure.harness;
 
 import com.farmerworking.leveldb.in.java.api.Comparator;
-import com.farmerworking.leveldb.in.java.data.structure.utils.TestUtils;
+import com.farmerworking.leveldb.in.java.common.TestUtils;
 import org.junit.Before;
 import org.junit.Test;
 

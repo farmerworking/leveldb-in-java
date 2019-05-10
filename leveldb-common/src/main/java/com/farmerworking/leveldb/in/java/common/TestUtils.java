@@ -1,4 +1,4 @@
-package com.farmerworking.leveldb.in.java.data.structure.utils;
+package com.farmerworking.leveldb.in.java.common;
 
 import java.util.Random;
 
