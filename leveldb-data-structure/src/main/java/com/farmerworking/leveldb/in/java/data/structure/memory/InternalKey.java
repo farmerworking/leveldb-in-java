@@ -7,7 +7,7 @@ import java.util.Objects;
 public class InternalKey implements Sizable {
     // We leave eight bits empty at the bottom so a type and sequence#
     // can be packed together into 64-bits.
-    static long kMaxSequenceNumber = (Long.MAX_VALUE >> 8) - 1;
+    public static long kMaxSequenceNumber = (Long.MAX_VALUE >> 8) - 1;
 
     public final String userKey;
     final char[] userKeyChar;
