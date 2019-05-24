@@ -3,6 +3,8 @@ package com.farmerworking.leveldb.in.java.data.structure.memory;
 public enum ValueType {
     kTypeDeletion(0), kTypeValue(1);
 
+    public static int kValueTypeForSeek = kTypeValue.getValue();
+
     private int value;
 
     ValueType(int value) {

@@ -1,8 +1,11 @@
 package com.farmerworking.leveldb.in.java.data.structure.memory;
 
+import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.data.structure.skiplist.Sizable;
 
 import java.util.Objects;
+
+import static com.farmerworking.leveldb.in.java.data.structure.memory.ValueType.kValueTypeForSeek;
 
 public class InternalKey implements Sizable {
     // We leave eight bits empty at the bottom so a type and sequence#
@@ -41,5 +44,24 @@ public class InternalKey implements Sizable {
     @Override
     public int memoryUsage() {
         return userKey.length() + userKeyChar.length + 8 + 4;
+    }
+
+    public String encode() {
+        assert(this.sequence <= kMaxSequenceNumber);
+        assert(this.type.getValue()  <= kValueTypeForSeek);
+
+        StringBuilder builder = new StringBuilder();
+        builder.append(userKey);
+        ICoding.getInstance().putFixed64(builder, (this.sequence << 8) | this.type.getValue());
+        return builder.toString();
+    }
+
+    public static InternalKey decode(String s) {
+        int length = ICoding.getInstance().getFixed64Length();
+        assert s.length() >= length;
+        char[] buffer = s.toCharArray();
+        String userKey = new String(buffer, 0, s.length() - length);
+        long num = ICoding.getInstance().decodeFixed64(buffer, s.length() - length);
+        return new InternalKey(userKey, num >>> 8, ValueType.valueOf((int) (num & 0xff)));
     }
 }
