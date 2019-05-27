@@ -48,7 +48,7 @@ public class InternalKey implements Sizable {
 
     public String encode() {
         assert(this.sequence <= kMaxSequenceNumber);
-        assert(this.type.getValue()  <= kValueTypeForSeek);
+        assert(this.type.getValue()  <= kValueTypeForSeek.getValue());
 
         StringBuilder builder = new StringBuilder();
         builder.append(userKey);

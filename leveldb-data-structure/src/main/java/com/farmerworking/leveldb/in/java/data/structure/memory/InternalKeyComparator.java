@@ -5,6 +5,10 @@ import com.farmerworking.leveldb.in.java.api.Comparator;
 public class InternalKeyComparator {
     final Comparator userComparator;
 
+    public Comparator getUserComparator() {
+        return userComparator;
+    }
+
     public InternalKeyComparator(Comparator userComparator) {
         this.userComparator = userComparator;
     }
