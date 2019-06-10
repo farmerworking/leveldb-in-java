@@ -17,10 +17,7 @@
     </properties>
 
     <modules>
-        <module>leveldb-common</module>
         <module>leveldb-data-structure</module>
-        <module>leveldb-file</module>
-        <module>leveldb-api</module>
     </modules>
 
     <dependencyManagement>
