@@ -66,21 +66,6 @@ public class TableIndexTransfer implements IndexTransfer {
         return iter;
     }
 
-    class CacheHandleReleaser implements Runnable {
-        private final Cache cache;
-        private final CacheHandle cacheHandle;
-
-        public CacheHandleReleaser(CacheHandle cacheHandle, Cache cache) {
-            this.cacheHandle = cacheHandle;
-            this.cache = cache;
-        }
-
-        @Override
-        public void run() {
-            cache.release(cacheHandle);
-        }
-    }
-
     private String buildCacheKey(long offset) {
         StringBuilder builder = new StringBuilder();
         ICoding.getInstance().putFixed64(builder, this.cacheId);

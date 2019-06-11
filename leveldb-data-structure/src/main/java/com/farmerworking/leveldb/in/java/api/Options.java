@@ -1,5 +1,7 @@
 package com.farmerworking.leveldb.in.java.api;
 
+import com.farmerworking.leveldb.in.java.file.Env;
+import com.farmerworking.leveldb.in.java.file.impl.DefaultEnv;
 import lombok.Data;
 
 @Data
@@ -66,6 +68,11 @@ public class Options {
     // Default: nullptr
     private Cache blockCache = null;
 
+    // Use the specified object to interact with the environment,
+    // e.g. to read/write files, schedule background work, etc.
+    // Default: Env::Default()
+    private Env env = new DefaultEnv();
+
     public Options() {}
 
     public Options(Options options) {
@@ -74,5 +81,6 @@ public class Options {
         this.filterPolicy = options.filterPolicy;
         this.blockSize = options.blockSize;
         this.compression = options.compression;
+        this.env = options.env;
     }
 }
