@@ -5,6 +5,7 @@ import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.ReadOptions;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.file.RandomAccessFile;
+import javafx.util.Pair;
 
 public interface ITableReader {
     // Returns a new iterator over the table contents.
@@ -23,6 +24,8 @@ public interface ITableReader {
     Status status();
 
     Status open(Options options, RandomAccessFile file, long size);
+
+    Pair<Status, Pair<String, String>> internalGet(ReadOptions readOptions, String key);
 
     public static ITableReader getDefaultImpl() {
         return new TableReader();

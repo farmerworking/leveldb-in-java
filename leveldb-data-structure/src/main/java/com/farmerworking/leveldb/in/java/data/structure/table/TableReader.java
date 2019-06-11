@@ -6,7 +6,6 @@ import com.farmerworking.leveldb.in.java.common.ICRC32C;
 import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.data.structure.block.IBlockReader;
 import com.farmerworking.leveldb.in.java.data.structure.block.IFilterBlockReader;
-import com.farmerworking.leveldb.in.java.data.structure.two.level.iterator.IndexTransfer;
 import com.farmerworking.leveldb.in.java.data.structure.two.level.iterator.TwoLevelIterator;
 import com.farmerworking.leveldb.in.java.file.RandomAccessFile;
 import javafx.util.Pair;
@@ -20,10 +19,11 @@ public class TableReader implements ITableReader {
     private Options options;
     private RandomAccessFile file;
     private BlockHandle metaIndexHandle;
-    private IBlockReader indexBlockReader;
+    IBlockReader indexBlockReader;
     private IFilterBlockReader filter;
     private String filterData;
     private long cacheId;
+    TableIndexTransfer indexTransfer;
 
     public Status open(Options options, RandomAccessFile file, long size) {
         if (size < Footer.kEncodedLength) {
@@ -57,6 +57,7 @@ public class TableReader implements ITableReader {
             this.metaIndexHandle = footer.getMetaIndexBlockHandle();
             this.indexBlockReader = IBlockReader.getDefaultImpl(pair.getValue());
             this.cacheId = options.getBlockCache() == null ? 0 : options.getBlockCache().newId();
+            this.indexTransfer = new TableIndexTransfer(this.file, this.options, this.cacheId, null);
             this.filterData = null;
             this.filter = null;
             this.readMeta();
@@ -70,7 +71,7 @@ public class TableReader implements ITableReader {
         return new TwoLevelIterator(
                 this.indexBlockReader.iterator(this.options.getComparator()),
                 readOptions,
-                new TableIndexTransfer(this.file, this.options, this.cacheId, null));
+                indexTransfer);
     }
 
     // for unit test only
@@ -105,6 +106,36 @@ public class TableReader implements ITableReader {
             result = this.metaIndexHandle.getOffset();
         }
         return result;
+    }
+
+    public Pair<Status, Pair<String, String>> internalGet(ReadOptions readOptions, String key) {
+        Status status = Status.OK();
+        Pair<String, String> result = null;
+
+        Iterator<String, String> indexIterator = this.indexBlockReader.iterator(this.options.getComparator());
+        indexIterator.seek(key);
+
+        if (indexIterator.valid()) {
+            BlockHandle blockHandle = new BlockHandle();
+            Pair<Status, Integer> pair = blockHandle.decodeFrom(indexIterator.value().toCharArray(), 0);
+
+            if (this.filter != null && pair.getKey().isOk() && !filter.keyMayMatch(blockHandle.getOffset(), key)) {
+                // Not found
+            } else {
+                Iterator<String, String> blockIterator = indexTransfer.transfer(readOptions, indexIterator.value());
+                blockIterator.seek(key);
+                if (blockIterator.valid() && blockIterator.key().equals(key)) {
+                    result = new Pair<>(blockIterator.key(), blockIterator.value());
+                }
+                status = blockIterator.status();
+            }
+        }
+
+        if (status.isOk()){
+            status = indexIterator.status();
+        }
+
+        return new Pair<>(status, result);
     }
 
     @Override

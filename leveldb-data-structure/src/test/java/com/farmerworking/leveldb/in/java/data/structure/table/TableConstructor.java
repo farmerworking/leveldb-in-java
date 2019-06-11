@@ -56,6 +56,10 @@ class TableConstructor extends Constructor {
         return status;
     }
 
+    public ITableReader getItableReader() {
+        return itableReader;
+    }
+
     public long approximateOffsetOf(String key) {
         return itableReader.approximateOffsetOf(key);
     }

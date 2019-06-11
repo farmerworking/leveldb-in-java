@@ -1,10 +1,12 @@
 package com.farmerworking.leveldb.in.java.api;
 
+import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.HashMap;
 import java.util.Map;
 
+@Data
 public class Status {
     private Integer code;
     private String message;
