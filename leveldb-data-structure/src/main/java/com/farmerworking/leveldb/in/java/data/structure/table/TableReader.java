@@ -68,7 +68,7 @@ public class TableReader implements ITableReader {
 
     @Override
     public Iterator<String, String> iterator(ReadOptions readOptions) {
-        return new TwoLevelIterator(
+        return new TwoLevelIterator<>(
                 this.indexBlockReader.iterator(this.options.getComparator()),
                 readOptions,
                 indexTransfer);
@@ -76,7 +76,7 @@ public class TableReader implements ITableReader {
 
     // for unit test only
     public Iterator<String, String> iterator(ReadOptions readOptions, Deleter deleter) {
-        return new TwoLevelIterator(
+        return new TwoLevelIterator<>(
                 this.indexBlockReader.iterator(this.options.getComparator()),
                 readOptions,
                 new TableIndexTransfer(this.file, this.options, this.cacheId, deleter));

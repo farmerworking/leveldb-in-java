@@ -8,7 +8,7 @@ import com.farmerworking.leveldb.in.java.data.structure.two.level.iterator.Index
 import com.farmerworking.leveldb.in.java.file.RandomAccessFile;
 import javafx.util.Pair;
 
-public class TableIndexTransfer implements IndexTransfer {
+public class TableIndexTransfer implements IndexTransfer<String> {
     private final Options options;
     private final RandomAccessFile file;
     private final long cacheId;

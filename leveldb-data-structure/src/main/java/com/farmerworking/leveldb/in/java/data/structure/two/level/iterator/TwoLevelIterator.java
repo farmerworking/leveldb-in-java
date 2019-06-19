@@ -14,15 +14,15 @@ import com.farmerworking.leveldb.in.java.data.structure.iterator.AbstractIterato
 //
 // Uses a supplied function to convert an index_iter value into
 // an iterator over the contents of the corresponding block.
-public class TwoLevelIterator extends AbstractIterator<String, String> {
-    private Iterator<String, String> indexIterator;
+public class TwoLevelIterator<K, V> extends AbstractIterator<String, String> {
+    private Iterator<K, V> indexIterator;
     private Iterator<String, String> dataIterator;
-    private String dataBlockHandleValue;
-    private IndexTransfer indexTransfer;
+    private V dataBlockHandleValue;
+    private IndexTransfer<V> indexTransfer;
     private ReadOptions readOptions;
     private Status status;
 
-    public TwoLevelIterator(Iterator<String, String> indexIter, ReadOptions readOptions, IndexTransfer transfer) {
+    public TwoLevelIterator(Iterator<K, V> indexIter, ReadOptions readOptions, IndexTransfer<V> transfer) {
         this.indexIterator = indexIter;
         this.readOptions = readOptions;
         this.indexTransfer = transfer;
@@ -118,7 +118,7 @@ public class TwoLevelIterator extends AbstractIterator<String, String> {
 
     private void initDataBlock() {
         if (indexIterator.valid()) {
-            String handleValue = indexIterator.value();
+            V handleValue = indexIterator.value();
             if (dataIterator != null && dataBlockHandleValue.equals(handleValue)) {
                 // dataIterator is already constructed with this iterator, so no need to change anything
             } else {
