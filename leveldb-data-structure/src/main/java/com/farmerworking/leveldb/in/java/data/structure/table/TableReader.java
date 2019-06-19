@@ -6,6 +6,8 @@ import com.farmerworking.leveldb.in.java.common.ICRC32C;
 import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.data.structure.block.IBlockReader;
 import com.farmerworking.leveldb.in.java.data.structure.block.IFilterBlockReader;
+import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
+import com.farmerworking.leveldb.in.java.data.structure.memory.ValueType;
 import com.farmerworking.leveldb.in.java.data.structure.two.level.iterator.TwoLevelIterator;
 import com.farmerworking.leveldb.in.java.file.RandomAccessFile;
 import javafx.util.Pair;
@@ -108,24 +110,38 @@ public class TableReader implements ITableReader {
         return result;
     }
 
-    public Pair<Status, Pair<String, String>> internalGet(ReadOptions readOptions, String key) {
+    public Status internalGet(ReadOptions readOptions, String internalKey, GetSaver saver) {
         Status status = Status.OK();
-        Pair<String, String> result = null;
 
         Iterator<String, String> indexIterator = this.indexBlockReader.iterator(this.options.getComparator());
-        indexIterator.seek(key);
+        indexIterator.seek(internalKey);
 
         if (indexIterator.valid()) {
             BlockHandle blockHandle = new BlockHandle();
             Pair<Status, Integer> pair = blockHandle.decodeFrom(indexIterator.value().toCharArray(), 0);
 
-            if (this.filter != null && pair.getKey().isOk() && !filter.keyMayMatch(blockHandle.getOffset(), key)) {
+            if (this.filter != null && pair.getKey().isOk() && !filter.keyMayMatch(blockHandle.getOffset(), internalKey)) {
                 // Not found
             } else {
                 Iterator<String, String> blockIterator = indexTransfer.transfer(readOptions, indexIterator.value());
-                blockIterator.seek(key);
-                if (blockIterator.valid() && blockIterator.key().equals(key)) {
-                    result = new Pair<>(blockIterator.key(), blockIterator.value());
+                blockIterator.seek(internalKey);
+                if (blockIterator.valid()) {
+                    InternalKey parsed = null;
+                    try {
+                        parsed = InternalKey.decode(blockIterator.key());
+                    } catch (Throwable e) {
+                        saver.setState(GetState.kCorrupt);
+                    }
+
+                    if (parsed != null) {
+                        if (saver.getUserComparator().compare(parsed.userKeyChar, saver.getUserKey().toCharArray()) == 0) {
+                            saver.setState(parsed.type == ValueType.kTypeValue ? GetState.kFound : GetState.kDeleted);
+
+                            if (saver.getState() == GetState.kFound) {
+                                saver.setValue(blockIterator.value());
+                            }
+                        }
+                    }
                 }
                 status = blockIterator.status();
             }
@@ -135,7 +151,7 @@ public class TableReader implements ITableReader {
             status = indexIterator.status();
         }
 
-        return new Pair<>(status, result);
+        return status;
     }
 
     @Override

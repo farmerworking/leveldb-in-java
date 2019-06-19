@@ -1,19 +1,12 @@
 package com.farmerworking.leveldb.in.java.data.structure.table;
 
 import com.farmerworking.leveldb.in.java.api.*;
-import com.farmerworking.leveldb.in.java.data.structure.block.BlockReader;
-import com.farmerworking.leveldb.in.java.data.structure.block.EmptyIterator;
 import com.farmerworking.leveldb.in.java.data.structure.cache.ShardedLRUCache;
 import com.farmerworking.leveldb.in.java.data.structure.cache.TestDeleter;
-import com.farmerworking.leveldb.in.java.data.structure.filter.BloomFilterPolicy;
 import com.farmerworking.leveldb.in.java.data.structure.harness.Harness;
 import com.farmerworking.leveldb.in.java.common.TestUtils;
-import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-import static org.mockito.ArgumentMatchers.*;
 
 import java.util.List;
 import java.util.Map;
@@ -116,119 +109,6 @@ public class ITableTest {
         Harness.testForwardScan(keys, data, iterator);
 
         assertFalse(deleter.deletedKeys.isEmpty());
-    }
-
-    @Test
-    public void testInternalGetWithoutFilter() {
-        Options options = new Options();
-        TableConstructor constructor = new TableConstructor(new BytewiseComparator(), options);
-
-        for (int i = 0; i < 100; i++) {
-            constructor.add(TestUtils.randomKey(5), TestUtils.randomString(10));
-        }
-
-        List<String> keys = constructor.finish(options);
-        Map<String, String> data = constructor.getData();
-
-        ITableReader tableReader = constructor.getItableReader();
-        ReadOptions readOptions = new ReadOptions();
-        for(String key : keys) {
-            Pair<Status, Pair<String, String>> pair = tableReader.internalGet(readOptions, key);
-            assertTrue(pair.getKey().isOk());
-            assertEquals(key, pair.getValue().getKey());
-            assertEquals(data.get(key), pair.getValue().getValue());
-        }
-
-        // not found case 1 --- all keys are smaller the specified key
-        String key = new String(new char[]{255, 255, 255, 255, 255, 255});
-        Pair<Status, Pair<String, String>> pair = tableReader.internalGet(readOptions, key);
-        assertTrue(pair.getKey().isOk());
-        assertNull(pair.getValue());
-
-        // not found case 2 --- exist key which is larger than the specified key
-        String key2 = new String(new char[]{0, 0, 0});
-        Pair<Status, Pair<String, String>> pair2 = tableReader.internalGet(readOptions, key2);
-        assertTrue(pair2.getKey().isOk());
-        assertNull(pair2.getValue());
-    }
-
-    @Test
-    public void testInternalGetWithFilter() {
-        Options options = new Options();
-        options.setFilterPolicy(new BloomFilterPolicy(10));
-        TableConstructor constructor = new TableConstructor(new BytewiseComparator(), options);
-
-        for (int i = 0; i < 100; i++) {
-            constructor.add(TestUtils.randomKey(5), TestUtils.randomString(10));
-        }
-
-        List<String> keys = constructor.finish(options);
-        Map<String, String> data = constructor.getData();
-
-        ITableReader tableReader = constructor.getItableReader();
-        ReadOptions readOptions = new ReadOptions();
-        for(String key : keys) {
-            Pair<Status, Pair<String, String>> pair = tableReader.internalGet(readOptions, key);
-            assertTrue(pair.getKey().isOk());
-            assertEquals(key, pair.getValue().getKey());
-            assertEquals(data.get(key), pair.getValue().getValue());
-        }
-
-        // not found case 1 --- all keys are smaller the specified key
-        String key = new String(new char[]{255, 255, 255, 255, 255, 255});
-        Pair<Status, Pair<String, String>> pair = tableReader.internalGet(readOptions, key);
-        assertTrue(pair.getKey().isOk());
-        assertNull(pair.getValue());
-
-        // not found case 2 --- exist key which is larger than the specified key
-        String key2 = new String(new char[]{0, 0, 0});
-        Pair<Status, Pair<String, String>> pair2 = tableReader.internalGet(readOptions, key2);
-        assertTrue(pair2.getKey().isOk());
-        assertNull(pair2.getValue());
-    }
-
-    @Test
-    public void testInternalGetErrorStatus() {
-        Options options = new Options();
-        options.setFilterPolicy(new BloomFilterPolicy(10));
-        TableConstructor constructor = new TableConstructor(new BytewiseComparator(), options);
-
-        for (int i = 0; i < 10; i++) {
-            constructor.add(TestUtils.randomKey(5), TestUtils.randomString(10));
-        }
-
-        List<String> keys = constructor.finish(options);
-        Map<String, String> data = constructor.getData();
-
-        TableReader tableReader = (TableReader) constructor.getItableReader();
-
-        ReadOptions readOptions = new ReadOptions();
-        for(String key : keys) {
-            Pair<Status, Pair<String, String>> pair = tableReader.internalGet(readOptions, key);
-            assertTrue(pair.getKey().isOk());
-            assertEquals(key, pair.getValue().getKey());
-            assertEquals(data.get(key), pair.getValue().getValue());
-        }
-
-        String key = keys.get(0);
-
-        // data error
-        TableIndexTransfer mockTransfer = mock(TableIndexTransfer.class);
-        when(mockTransfer.transfer(any(ReadOptions.class), anyString())).thenReturn(new EmptyIterator(Status.Corruption("force data error")));
-        tableReader.indexTransfer = mockTransfer;
-
-        Pair<Status, Pair<String, String>> pair = tableReader.internalGet(readOptions, key);
-        assertTrue(pair.getKey().IsCorruption());
-        assertEquals("force data error", pair.getKey().getMessage());
-
-        // index error
-        BlockReader mockReader = mock(BlockReader.class);
-        when(mockReader.iterator(any(Comparator.class))).thenReturn(new EmptyIterator(Status.Corruption("force index error")));
-        tableReader.indexBlockReader = mockReader;
-
-        pair = tableReader.internalGet(readOptions, key);
-        assertTrue(pair.getKey().IsCorruption());
-        assertEquals("force index error", pair.getKey().getMessage());
     }
 
     static boolean between(long value, long low, long high) {

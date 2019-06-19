@@ -2,6 +2,10 @@ package com.farmerworking.leveldb.in.java.data.structure.cache;
 
 import com.farmerworking.leveldb.in.java.api.*;
 import com.farmerworking.leveldb.in.java.common.TestUtils;
+import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
+import com.farmerworking.leveldb.in.java.data.structure.memory.ValueType;
+import com.farmerworking.leveldb.in.java.data.structure.table.GetSaver;
+import com.farmerworking.leveldb.in.java.data.structure.table.GetState;
 import com.farmerworking.leveldb.in.java.data.structure.table.ITableBuilder;
 import com.farmerworking.leveldb.in.java.data.structure.table.ITableReader;
 import com.farmerworking.leveldb.in.java.file.Env;
@@ -24,13 +28,18 @@ public class TableCacheTest {
     String dbname;
     String fileName;
 
+    String userKey;
     String key;
     String value;
 
     Long fileNumber;
 
+    Comparator userComparator;
+
     @Before
     public void setUp() throws Exception {
+        userComparator = new BytewiseComparator();
+
         options = new Options();
         Pair<Status, String> pair = options.getEnv().getTestDirectory();
         assertTrue(pair.getKey().isOk());
@@ -43,7 +52,8 @@ public class TableCacheTest {
         assertTrue(filePair.getKey().isOk());
         builder = ITableBuilder.getDefaultImpl(options, filePair.getValue());
 
-        key = TestUtils.randomKey(5);
+        userKey = TestUtils.randomKey(5);
+        key = new InternalKey(userKey, 1L, ValueType.kTypeValue).encode();
         value = TestUtils.randomString(10);
         builder.add(key, value);
 
@@ -68,15 +78,17 @@ public class TableCacheTest {
         assertEquals(0, statPair.getValue().intValue());
 
         // get exist key
-        Pair<Status, Pair<String, String>> getPair = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key);
-        assertTrue(getPair.getKey().isOk());
-        assertEquals(key, getPair.getValue().getKey());
-        assertEquals(value, getPair.getValue().getValue());
+        GetSaver saver = new GetSaver(userKey, userComparator);
+        Status status = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key, saver);
+        assertTrue(status.isOk());
+        assertEquals(GetState.kFound, saver.getState());
+        assertEquals(value, saver.getValue());
 
         // get non-exist key
-        getPair = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), "two");
-        assertTrue(getPair.getKey().isOk());
-        assertNull(getPair.getValue());
+        saver = new GetSaver("two", userComparator);
+        status = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), new InternalKey("two", 1L, ValueType.kTypeValue).encode(), saver);
+        assertTrue(status.isOk());
+        assertEquals(GetState.kNotFound, saver.getState());
     }
 
     @Test
@@ -85,23 +97,23 @@ public class TableCacheTest {
         assertEquals(0, statPair.getKey().intValue());
         assertEquals(0, statPair.getValue().intValue());
 
-        Pair<Status, Pair<String, String>> getPair = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), "three");
+        Status status = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), "three", new GetSaver("three", new BytewiseComparator()));
         statPair = tableCache.stat();
         assertEquals(0, statPair.getKey().intValue());
         assertEquals(1, statPair.getValue().intValue());
 
-        getPair = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), "three");
+        status = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), "three", new GetSaver("three", new BytewiseComparator()));
         statPair = tableCache.stat();
         assertEquals(1, statPair.getKey().intValue());
         assertEquals(1, statPair.getValue().intValue());
 
         tableCache.evict(fileNumber);
-        getPair = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), "four");
+        status = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), "four", new GetSaver("three", new BytewiseComparator()));
         statPair = tableCache.stat();
         assertEquals(1, statPair.getKey().intValue());
         assertEquals(2, statPair.getValue().intValue());
 
-        getPair = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), "five");
+        status = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), "five", new GetSaver("three", new BytewiseComparator()));
         statPair = tableCache.stat();
         assertEquals(2, statPair.getKey().intValue());
         assertEquals(2, statPair.getValue().intValue());
@@ -113,48 +125,52 @@ public class TableCacheTest {
         assertTrue(findPair.getKey().isOk());
         LRUCacheNode<Pair<RandomAccessFile, ITableReader>> handle = (LRUCacheNode<Pair<RandomAccessFile, ITableReader>>) findPair.getValue();
         int before = handle.getPins();
-        Pair<Status, Pair<String, String>> getPair = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), "six");
+        Status status = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), "six", new GetSaver("six", new BytewiseComparator()));
         assertEquals(before, handle.getPins());
     }
 
     @Test
     public void testGetWhenInternalGetError() {
         // pre check
-        Pair<Status, Pair<String, String>> getPair = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key);
-        assertTrue(getPair.getKey().isOk());
-        assertEquals(key, getPair.getValue().getKey());
-        assertEquals(value, getPair.getValue().getValue());
+        GetSaver saver = new GetSaver(userKey, userComparator);
+        Status status = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key, saver);
+        assertTrue(status.isOk());
+        assertEquals(GetState.kFound, saver.getState());
+        assertEquals(value, saver.getValue());
 
         // cause internal get error
         ITableReader mockTableReader = mock(ITableReader.class);
-        when(mockTableReader.internalGet(any(ReadOptions.class), anyString())).thenReturn(new Pair<>(Status.Corruption("internal get force error"), null));
+        when(mockTableReader.internalGet(any(ReadOptions.class), anyString(), any(GetSaver.class))).thenReturn(Status.Corruption("internal get force error"));
 
         ShardedLRUCache<Pair<RandomAccessFile, ITableReader>> spyCache = spy(tableCache.cache);
         doReturn(new Pair<>(null, mockTableReader)).when(spyCache).value(any(CacheHandle.class));
         tableCache.cache = spyCache;
 
         // verify
-        getPair = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key);
-        assertTrue(getPair.getKey().IsCorruption());
-        assertEquals("internal get force error", getPair.getKey().getMessage());
+        saver = new GetSaver(userKey, userComparator);
+        status = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key, saver);
+        assertTrue(status.IsCorruption());
+        assertEquals("internal get force error", status.getMessage());
     }
 
     @Test
     public void testGetFindTableError() {
         // pre check
-        Pair<Status, Pair<String, String>> getPair = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key);
-        assertTrue(getPair.getKey().isOk());
-        assertEquals(key, getPair.getValue().getKey());
-        assertEquals(value, getPair.getValue().getValue());
+        GetSaver saver = new GetSaver(userKey, userComparator);
+        Status status = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key, saver);
+        assertTrue(status.isOk());
+        assertEquals(GetState.kFound, saver.getState());
+        assertEquals(value, saver.getValue());
 
         // cause find table error
         TableCache spyTableCache = spy(tableCache);
         doReturn(new Pair<>(Status.Corruption("find table force error"), null)).when(spyTableCache).findTable(anyLong(), anyLong());
 
         // verify
-        getPair = spyTableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key);
-        assertTrue(getPair.getKey().IsCorruption());
-        assertEquals("find table force error", getPair.getKey().getMessage());
+        saver = new GetSaver(userKey, userComparator);
+        status = spyTableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key, saver);
+        assertTrue(status.IsCorruption());
+        assertEquals("find table force error", status.getMessage());
     }
 
     @Test
@@ -210,7 +226,8 @@ public class TableCacheTest {
         assertTrue(filePair.getKey().isOk());
         ITableBuilder builder = ITableBuilder.getDefaultImpl(options, filePair.getValue());
 
-        String key = TestUtils.randomKey(5);
+        String userKey = TestUtils.randomKey(5);
+        String key = new InternalKey(userKey, 1L, ValueType.kTypeValue).encode();
         String value = TestUtils.randomString(10);
         builder.add(key, value);
 
@@ -218,10 +235,11 @@ public class TableCacheTest {
         assertTrue(status.isOk());
 
         TableCache tableCache = new TableCache(dbname, options, 1024);
-        Pair<Status, Pair<String, String>> getPair = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key);
-        assertTrue(getPair.getKey().isOk());
-        assertEquals(key, getPair.getValue().getKey());
-        assertEquals(value, getPair.getValue().getValue());
+        GetSaver saver = new GetSaver(userKey, userComparator);
+        status = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key, saver);
+        assertTrue(status.isOk());
+        assertEquals(GetState.kFound, saver.getState());
+        assertEquals(value, saver.getValue());
     }
 
     @Test

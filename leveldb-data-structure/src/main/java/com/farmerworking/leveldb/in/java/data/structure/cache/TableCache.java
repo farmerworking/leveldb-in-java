@@ -4,6 +4,7 @@ import com.farmerworking.leveldb.in.java.api.*;
 import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.data.structure.block.EmptyIterator;
 import com.farmerworking.leveldb.in.java.data.structure.table.CacheHandleReleaser;
+import com.farmerworking.leveldb.in.java.data.structure.table.GetSaver;
 import com.farmerworking.leveldb.in.java.data.structure.table.ITableReader;
 import com.farmerworking.leveldb.in.java.file.FileName;
 import com.farmerworking.leveldb.in.java.file.RandomAccessFile;
@@ -26,17 +27,17 @@ public class TableCache {
         this.miss = 0;
     }
 
-    public Pair<Status, Pair<String, String>> get(ReadOptions readOptions, long fileNumber, long fileSize, String key) {
+    public Status get(ReadOptions readOptions, long fileNumber, long fileSize, String internalKey, GetSaver saver) {
         Pair<Status, CacheHandle<Pair<RandomAccessFile, ITableReader>>> pair = findTable(fileNumber, fileSize);
 
         if (pair.getKey().isOk()) {
             ITableReader tableReader = cache.value(pair.getValue()).getValue();
-            Pair<Status, Pair<String, String>> getPair = tableReader.internalGet(readOptions, key);
+            Status status = tableReader.internalGet(readOptions, internalKey, saver);
             cache.release(pair.getValue());
-            return getPair;
+            return status;
         }
 
-        return new Pair<>(pair.getKey(), null);
+        return pair.getKey();
     }
 
     public void evict(long fileNumber) {
