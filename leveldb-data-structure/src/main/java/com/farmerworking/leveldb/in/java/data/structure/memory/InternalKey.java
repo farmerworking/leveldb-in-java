@@ -13,7 +13,7 @@ public class InternalKey implements Sizable {
     public static long kMaxSequenceNumber = (Long.MAX_VALUE >> 8) - 1;
 
     public final String userKey;
-    final char[] userKeyChar;
+    public final char[] userKeyChar;
     public final long sequence;
     public final ValueType type;
 
