@@ -12,6 +12,7 @@ import com.google.common.collect.Lists;
 import javafx.util.Pair;
 
 import java.util.*;
+import java.util.function.Predicate;
 
 public class Version {
     VersionSet versionSetBelongTo;
@@ -104,9 +105,7 @@ public class Version {
                 lastFileRead = fileMetaData;
                 lastFileReadLevel = level;
 
-                GetSaver saver = new GetSaver(
-                        internalKey.userKey,
-                        versionSetBelongTo.getInternalKeyComparator().getUserComparator());
+                GetSaver saver = newGetSaver(internalKey.userKey);
                 Status status = versionSetBelongTo.getTableCache().get(
                         options,
                         fileMetaData.getFileNumber(),
@@ -154,41 +153,49 @@ public class Version {
     // bytes.  Returns true if a new compaction may need to be triggered.
     // REQUIRES: lock is held
     public boolean recordReadSample(InternalKey internalKey) {
-        int matches = 0;
-        GetStats stats = new GetStats();
-        boolean stop = false;
-
-        for (int level = 0; level < Config.kNumLevels; level++) {
-            Collection<FileMetaData> filesToSearch = getFilesToSearchForLevel(level, internalKey.userKeyChar, internalKey.sequence);
-
-            for(FileMetaData fileMetaData : filesToSearch) {
-                matches ++;
-                if (matches == 1) {
-                    // Remember first match
-                    stats.setSeekFile(fileMetaData);
-                    stats.setSeekFileLevel(level);
-                }
-
-                if (matches >= 2) {
-                    stop = true;
-                    break;
-                }
-            }
-
-            if (stop) {
-                break;
-            }
-        }
-
+        MatchObj matchObj = new MatchObj();
+        forEachOverlapping(internalKey.userKeyChar, internalKey.sequence, matchObj);
         // Must have at least two matches since we want to merge across
         // files. But what if we have a single file that contains many
         // overwrites and deletions?  Should we have another mechanism for
         // finding such files?
-        if (matches >= 2) {
+        if (matchObj.matches >= 2) {
             // 1MB cost is about 1 seek (see comment in Builder::Apply).
-            return updateStats(stats);
+            return updateStats(matchObj.stats);
         }
         return false;
+    }
+
+    static class MatchObj implements Predicate<Pair<Integer, FileMetaData>> {
+        int matches = 0;
+        GetStats stats = new GetStats();
+
+        @Override
+        public boolean test(Pair<Integer, FileMetaData> pair) {
+            matches ++;
+            if (this.matches == 1) {
+                // Remember first match
+                stats.setSeekFile(pair.getValue());
+                stats.setSeekFileLevel(pair.getKey());
+            }
+
+            if (matches >= 2) {
+                return false;
+            }
+            return true;
+        }
+    }
+
+    protected void forEachOverlapping(char[] userKeyChar, long sequence, Predicate<Pair<Integer, FileMetaData>> predicate) {
+        for (int level = 0; level < Config.kNumLevels; level++) {
+            Collection<FileMetaData> filesToSearch = getFilesToSearchForLevel(level, userKeyChar, sequence);
+
+            for(FileMetaData fileMetaData : filesToSearch) {
+                if (!predicate.test(new Pair<>(level, fileMetaData))) {
+                    return;
+                }
+            }
+        }
     }
 
     public void ref() {
@@ -224,7 +231,6 @@ public class Version {
                     break;
                 }
 
-                // todo: why this block logic exist
                 if (level + 2 < Config.kNumLevels) {
                     // Check that file does not overlap too many grandparent bytes.
                     Vector<FileMetaData> overlaps = getOverlappingInputs(
@@ -232,7 +238,7 @@ public class Version {
                             new InternalKey(smallestUserKey, InternalKey.kMaxSequenceNumber, ValueType.kValueTypeForSeek),
                             new InternalKey(largestUserKey, 0, ValueType.kTypeDeletion));
                     long sum = totalFileSize(overlaps);
-                    if (sum > maxGrandParentOverlapBytes(versionSetBelongTo.getOptions())) {
+                    if (sum > maxGrandParentOverlapBytes()) {
                         break;
                     }
 
@@ -240,7 +246,6 @@ public class Version {
 
                 level ++;
             }
-
         }
         return level;
     }
@@ -288,19 +293,25 @@ public class Version {
         return result;
     }
 
-    private long maxGrandParentOverlapBytes(Options options) {
-        return 10 * targetFileSize(options);
+    // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
+    // stop building a single file in a level->level+1 compaction.
+    private long maxGrandParentOverlapBytes() {
+        return 10 * targetFileSize();
     }
 
-    private long targetFileSize(Options options) {
-        return options.getMaxFileSize();
+    protected long targetFileSize() {
+        return versionSetBelongTo.getOptions().getMaxFileSize();
     }
 
-    private long totalFileSize(Vector<FileMetaData> files) {
+    protected long totalFileSize(Vector<FileMetaData> files) {
         return files.stream().mapToLong(FileMetaData::getFileSize).sum();
     }
 
-    protected Collection<FileMetaData> getFilesToSearchForLevel(int level, char[] userKeyChar, long sequence) {
+    protected GetSaver newGetSaver(String userKey) {
+        return new GetSaver(userKey, versionSetBelongTo.getInternalKeyComparator().getUserComparator());
+    }
+
+    protected List<FileMetaData> getFilesToSearchForLevel(int level, char[] userKeyChar, long sequence) {
         int fileNums = files.get(level).size();
 
         if (fileNums == 0) {
@@ -342,5 +353,4 @@ public class Version {
             }
         }
     }
-
 }
