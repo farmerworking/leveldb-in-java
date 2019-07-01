@@ -35,7 +35,7 @@ public class VersionEdit {
     private boolean hasLastSequence;
 
     private Vector<Pair<Integer, InternalKey>> compactPointers = new Vector<>();
-    private Set<Pair<Integer, Long>> deletedFiles = new HashSet<>();
+    Set<Pair<Integer, Long>> deletedFiles = new HashSet<>();
     private Vector<Pair<Integer, FileMetaData> > newFiles = new Vector<>();
 
     private ICoding coding = ICoding.getInstance();

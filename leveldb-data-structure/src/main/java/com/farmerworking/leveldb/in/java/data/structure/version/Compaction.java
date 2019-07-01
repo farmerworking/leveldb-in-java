@@ -12,16 +12,16 @@ public class Compaction {
     private final int level;
 
     private long maxOutputFileSize;
-    private Version inputVersion;
+    Version inputVersion;
 
     // Index in grandparent_starts_
     int grandparentIndex;
 
     // Some output key has been seen
-    private boolean seenKey;
+    boolean seenKey;
 
     // Bytes of overlap between current output and grandparent files
-    private long overlappedBytes;
+    long overlappedBytes;
 
     // level_ptrs_ holds indices into input_version_->levels_: our state
     // is that we are positioned at one of the file ranges for each
@@ -34,8 +34,12 @@ public class Compaction {
     // Each compaction reads inputs from "level_" and "level_+1"
     Vector<FileMetaData>[] inputs = new Vector[2];
 
+    // State for implementing IsBaseLevelForKey
+
     // State used to check for number of of overlapping grandparent files
     // (parent == level_ + 1, grandparent == level_ + 2)
+    // require: parameter is passed in increased order
+    // require: grandparent files is immutable during usage
     Vector<FileMetaData> grandparents;
 
     public Compaction(Options options, int level) {
@@ -45,6 +49,11 @@ public class Compaction {
         this.grandparentIndex = 0;
         this.seenKey = false;
         this.overlappedBytes = 0;
+        this.grandparents = new Vector<>();
+
+        for (int i = 0; i < 2; i++) {
+            inputs[i] = new Vector<>();
+        }
 
         for (int i = 0; i < Config.kNumLevels; i++) {
             levelPtrs[i] = 0;
@@ -57,8 +66,7 @@ public class Compaction {
         return level;
     }
 
-    // Return the object that holds the edits to the descriptor done
-    // by this compaction.
+    // Return the object that holds the edits to the descriptor done by this compaction.
     public VersionEdit getEdit() {
         return edit;
     }
@@ -87,7 +95,7 @@ public class Compaction {
         return (this.numInputFiles(0) == 1 &&
                 this.numInputFiles(1) == 0 &&
                 totalFileSize(this.grandparents) <=
-                        maxGrandParentOverlapBytes(inputVersion.versionSetBelongTo.getOptions()));
+                        maxGrandParentOverlapBytes());
     }
 
     // Add all inputs to this compaction as delete operations to *edit.
@@ -100,9 +108,8 @@ public class Compaction {
     }
 
     // Returns true if the information we have available guarantees that
-    // the compaction is producing data in "level+1" for which no data exists
-    // in levels greater than "level+1".
-    public boolean IsBaseLevelForKey(String userKey) {
+    // the compaction is producing data in "level+1" for which no data exists in levels greater than "level+1".
+    public boolean isBaseLevelForKey(String userKey) {
         // Maybe use binary search to find right entry instead of linear search?
         char[] userKeyChar = userKey.toCharArray();
         Comparator userComparator = inputVersion.versionSetBelongTo.getInternalKeyComparator().getUserComparator();
@@ -136,7 +143,7 @@ public class Compaction {
         }
 
         this.seenKey = true;
-        if (this.overlappedBytes > maxFileSizeForLevel(inputVersion.versionSetBelongTo.getOptions(), level)) {
+        if (this.overlappedBytes > maxGrandParentOverlapBytes()) {
             // Too much overlap for current output; start new output
             this.overlappedBytes = 0;
             return true;
@@ -145,7 +152,7 @@ public class Compaction {
         }
     }
 
-    private long maxFileSizeForLevel(Options options, int level) {
+    protected long maxFileSizeForLevel(Options options, int level) {
         // We could vary per level to reduce number of files?
         return targetFileSize(options);
     }
@@ -160,7 +167,7 @@ public class Compaction {
 
     // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
     // stop building a single file in a level->level+1 compaction.
-    private long maxGrandParentOverlapBytes(Options options) {
-        return 10 * targetFileSize(options);
+    protected long maxGrandParentOverlapBytes() {
+        return 10 * targetFileSize(inputVersion.versionSetBelongTo.getOptions());
     }
 }
