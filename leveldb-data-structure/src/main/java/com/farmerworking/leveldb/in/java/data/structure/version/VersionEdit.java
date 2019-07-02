@@ -4,12 +4,14 @@ import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import javafx.util.Pair;
+import lombok.Data;
 
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.Vector;
 
+@Data
 public class VersionEdit {
     // Tag numbers for serialized VersionEdit.  These numbers are written to disk and should not be changed.
     int kComparator           = 1;

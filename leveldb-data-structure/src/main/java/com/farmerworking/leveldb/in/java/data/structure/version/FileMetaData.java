@@ -18,4 +18,13 @@ public class FileMetaData {
         this.smallest = smallest;
         this.largest = largest;
     }
+
+    public FileMetaData(FileMetaData metaData) {
+        this.refs = metaData.refs;
+        this.allowedSeeks = metaData.allowedSeeks;
+        this.fileNumber = metaData.fileNumber;
+        this.fileSize = metaData.fileSize;
+        this.smallest = metaData.smallest;
+        this.largest = metaData.largest;
+    }
 }
