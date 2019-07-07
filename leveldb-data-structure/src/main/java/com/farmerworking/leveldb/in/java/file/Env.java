@@ -2,6 +2,7 @@ package com.farmerworking.leveldb.in.java.file;
 
 import com.farmerworking.leveldb.in.java.api.Status;
 import javafx.util.Pair;
+import org.apache.commons.lang3.StringUtils;
 
 public interface Env {
     Pair<Status, WritableFile> newWritableFile(String filename) ;
@@ -17,4 +18,34 @@ public interface Env {
     Pair<Status, Boolean> delete(String filename);
 
     Pair<Status, Boolean> isFileExists(String filename);
+
+    Pair<Status, Long> getFileSize(String filename);
+
+    Status renameFile(String from, String to);
+
+    static Pair<Status, String> readFileToString(Env env, String fname) {
+        Pair<Status, SequentialFile> pair = env.newSequentialFile(fname);
+        Status status = pair.getKey();
+
+        if (status.isNotOk()) {
+            return new Pair<>(status, null);
+        }
+        SequentialFile file = pair.getValue();
+
+        String result = null;
+        while(true) {
+            Pair<Status, String> readPair = file.read(8192);
+            status = readPair.getKey();
+
+            if (status.isNotOk()) {
+                break;
+            }
+            result += readPair.getValue();
+            if (StringUtils.isEmpty(readPair.getValue())) {
+                break;
+            }
+        }
+
+        return new Pair<>(status, result);
+    }
 }

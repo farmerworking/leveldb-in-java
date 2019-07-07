@@ -7,10 +7,7 @@ import com.farmerworking.leveldb.in.java.file.SequentialFile;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
 import javafx.util.Pair;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -91,5 +88,28 @@ public class DefaultEnv implements Env {
         } catch (Exception e) {
             return new Pair<>(Status.IOError(e.getMessage()), null);
         }
+    }
+
+    @Override
+    public Pair<Status, Long> getFileSize(String filename) {
+        Status status = Status.OK();
+        Long result = null;
+
+        File file = new File(filename);
+        if (file.exists()) {
+            result = file.length();
+        } else {
+            status = Status.IOError(filename);
+        }
+        return new Pair<>(status, result);
+    }
+
+    @Override
+    public Status renameFile(String from, String to) {
+        Status result = Status.OK();
+        if (!new File(from).renameTo(new File(to))) {
+            result = Status.IOError(from);
+        }
+        return result;
     }
 }

@@ -1,5 +1,6 @@
 package com.farmerworking.leveldb.in.java.file;
 
+import com.farmerworking.leveldb.in.java.api.Status;
 import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
 
@@ -88,6 +89,54 @@ public class FileName {
                 }
             }
         }
+    }
+
+    public static Status setCurrentFile(Env env, String dbname, long descriptorNumber) {
+        // Remove leading "dbname/" and add newline to manifest file name
+        String manifest = descriptorFileName(dbname, descriptorNumber);
+        assert manifest.startsWith(dbname + "/");
+        String content = manifest.substring(dbname.length() + 1);
+        String tmp = tempFileName(dbname, descriptorNumber);
+        Status status = writeStringToFileSync(env, content + "\n", tmp);
+
+        if (status.isOk()) {
+            status = env.renameFile(tmp, currentFileName(dbname));
+        }
+
+        if (status.isNotOk()) {
+            env.delete(tmp);
+        }
+
+        return status;
+    }
+
+    private static Status writeStringToFileSync(Env env, String s, String fname) {
+        return doWriteStringToFile(env, s, fname, true);
+    }
+
+    private static Status doWriteStringToFile(Env env, String data, String fname, boolean shouldSync) {
+        Pair<Status, WritableFile> pair = env.newWritableFile(fname);
+        Status status = pair.getKey();
+        if (status.isNotOk()) {
+            return pair.getKey();
+        }
+
+        WritableFile file = pair.getValue();
+        status = file.append(data);
+
+        if (status.isOk() && shouldSync) {
+            status = file.sync();
+        }
+
+        if (status.isOk()) {
+            status = file.close();
+        }
+
+        if (status.isNotOk()) {
+            env.delete(fname);
+        }
+
+        return status;
     }
 
     private static String makeFileName(String dbName, long number, String suffix) {
