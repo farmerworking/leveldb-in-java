@@ -68,7 +68,7 @@ public class Version {
             iterators.add(versionSetBelongTo.getTableCache().iterator(
                     readOptions,
                     level0.get(i).getFileNumber(),
-                    level0.get(i).getFileSize()));
+                    level0.get(i).getFileSize()).getKey());
         }
 
         // For levels > 0, we can use a concatenating iterator that sequentially

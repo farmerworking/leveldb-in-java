@@ -175,7 +175,7 @@ public class TableCacheTest {
 
     @Test
     public void testSimpleIterator() {
-        Iterator<String, String> iter = tableCache.iterator(new ReadOptions(), fileNumber, builder.fileSize());
+        Iterator<String, String> iter = tableCache.iterator(new ReadOptions(), fileNumber, builder.fileSize()).getKey();
 
         assertFalse(iter.valid());
         iter.seekToFirst();
@@ -195,7 +195,7 @@ public class TableCacheTest {
 
         LRUCacheNode<Pair<RandomAccessFile, ITableReader>> handle = (LRUCacheNode<Pair<RandomAccessFile, ITableReader>>) findPair.getValue();
         int before = handle.getPins();
-        Iterator<String, String> iter = tableCache.iterator(new ReadOptions(), fileNumber, builder.fileSize());
+        Iterator<String, String> iter = tableCache.iterator(new ReadOptions(), fileNumber, builder.fileSize()).getKey();
         assertEquals(before + 1, handle.getPins());
         iter.close();
         assertEquals(before, handle.getPins());
@@ -204,7 +204,7 @@ public class TableCacheTest {
     @Test
     public void testIteratorFindTableError() {
         // pre check
-        Iterator<String, String> iter = tableCache.iterator(new ReadOptions(), fileNumber, builder.fileSize());
+        Iterator<String, String> iter = tableCache.iterator(new ReadOptions(), fileNumber, builder.fileSize()).getKey();
         assertTrue(iter.status().isOk());
 
         // cause find table error
@@ -212,7 +212,7 @@ public class TableCacheTest {
         doReturn(new Pair<>(Status.Corruption("find table force error"), null)).when(spyTableCache).findTable(anyLong(), anyLong());
 
         // pre check
-        iter = spyTableCache.iterator(new ReadOptions(), fileNumber, builder.fileSize());
+        iter = spyTableCache.iterator(new ReadOptions(), fileNumber, builder.fileSize()).getKey();
         assertTrue(iter.status().IsCorruption());
         assertEquals("find table force error", iter.status().getMessage());
     }

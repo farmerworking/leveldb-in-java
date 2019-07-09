@@ -23,7 +23,7 @@ public class TableCacheIndexTransfer implements IndexTransfer<Pair<Long, Long>> 
             return new EmptyIterator(
                     Status.Corruption("FileReader invoked with unexpected value"));
         } else {
-            return tableCache.iterator(options, value.getKey(), value.getValue());
+            return tableCache.iterator(options, value.getKey(), value.getValue()).getKey();
         }
     }
 }

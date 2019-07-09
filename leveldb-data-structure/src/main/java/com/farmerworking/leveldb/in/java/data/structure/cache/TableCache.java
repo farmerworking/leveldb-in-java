@@ -45,15 +45,15 @@ public class TableCache {
         cache.erase(cacheKey);
     }
 
-    public Iterator<String, String> iterator(ReadOptions readOptions, long fileNumber, long fileSize) {
+    public Pair<Iterator<String, String>, ITableReader> iterator(ReadOptions readOptions, long fileNumber, long fileSize) {
         Pair<Status, CacheHandle<Pair<RandomAccessFile, ITableReader>>> pair = findTable(fileNumber, fileSize);
         if (pair.getKey().isNotOk()) {
-            return new EmptyIterator(pair.getKey());
+            return new Pair<>(new EmptyIterator(pair.getKey()), null);
         } else {
             ITableReader tableReader = cache.value(pair.getValue()).getValue();
             Iterator<String, String> iter = tableReader.iterator(readOptions);
             iter.registerCleanup(new CacheHandleReleaser(pair.getValue(), cache));
-            return iter;
+            return new Pair<>(iter, tableReader);
         }
     }
 
