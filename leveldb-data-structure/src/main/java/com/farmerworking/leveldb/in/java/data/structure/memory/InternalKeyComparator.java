@@ -2,7 +2,7 @@ package com.farmerworking.leveldb.in.java.data.structure.memory;
 
 import com.farmerworking.leveldb.in.java.api.Comparator;
 
-public class InternalKeyComparator {
+public class InternalKeyComparator implements Comparator{
     final Comparator userComparator;
 
     public Comparator getUserComparator() {
@@ -63,5 +63,28 @@ public class InternalKeyComparator {
         } else {
             return a;
         }
+    }
+
+    // MergingIterator use InternalKeyComparator for real scenario
+    // In unit test scenario, use Comparator for MergingIterator is much easier right now
+    // So let InternalKeyComparator implement Comparator interface
+    // TODO: refactory unit test logic to support InternalKeyComparator for MergingIterator and remove codes below
+    public int compare(char[] a, char[] b) {
+        return compare(InternalKey.decode(a), InternalKey.decode(b));
+    }
+
+    @Override
+    public String name() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public char[] findShortestSeparator(char[] a, char[] b) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public char[] findShortSuccessor(char[] a) {
+        throw new UnsupportedOperationException();
     }
 }

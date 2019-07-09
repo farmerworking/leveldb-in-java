@@ -57,11 +57,14 @@ public class InternalKey implements Sizable {
     }
 
     public static InternalKey decode(String s) {
+        return decode(s.toCharArray());
+    }
+
+    public static InternalKey decode(char[] chars) {
         int length = ICoding.getInstance().getFixed64Length();
-        assert s.length() >= length;
-        char[] buffer = s.toCharArray();
-        String userKey = new String(buffer, 0, s.length() - length);
-        long num = ICoding.getInstance().decodeFixed64(buffer, s.length() - length);
+        assert chars.length >= length;
+        String userKey = new String(chars, 0, chars.length - length);
+        long num = ICoding.getInstance().decodeFixed64(chars, chars.length - length);
         return new InternalKey(userKey, num >>> 8, ValueType.valueOf((int) (num & 0xff)));
     }
 }
