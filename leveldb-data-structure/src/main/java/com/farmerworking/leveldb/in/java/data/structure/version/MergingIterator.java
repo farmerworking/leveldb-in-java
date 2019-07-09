@@ -1,10 +1,10 @@
 package com.farmerworking.leveldb.in.java.data.structure.version;
 
+import com.farmerworking.leveldb.in.java.api.Comparator;
 import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.data.structure.block.EmptyIterator;
 import com.farmerworking.leveldb.in.java.data.structure.iterator.AbstractIterator;
-import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
 
 import java.util.List;
@@ -12,7 +12,7 @@ import java.util.List;
 public class MergingIterator extends AbstractIterator<String, String> {
 
     public static Iterator<String, String> newMergingIterator(
-            InternalKeyComparator comparator,
+            Comparator comparator,
             List<Iterator<String, String>> iteratorList) {
         assert iteratorList != null;
 
@@ -25,14 +25,14 @@ public class MergingIterator extends AbstractIterator<String, String> {
         }
     }
 
-    private InternalKeyComparator comparator;
+    private Comparator comparator;
     private List<Iterator<String, String>> iteratorList;
     private Iterator<String, String> current;
-    
+
     // true == kForward, false == kReverse
     private boolean forwardDirection;
 
-    public MergingIterator(InternalKeyComparator comparator, List<Iterator<String, String>> iteratorList) {
+    public MergingIterator(Comparator comparator, List<Iterator<String, String>> iteratorList) {
         this.comparator = comparator;
         this.iteratorList = iteratorList;
         this.current = null;
@@ -41,11 +41,13 @@ public class MergingIterator extends AbstractIterator<String, String> {
 
     @Override
     public boolean valid() {
+        assert !this.closed;
         return current != null;
     }
 
     @Override
     public void seekToFirst() {
+        assert !this.closed;
         for (Iterator<String, String> iter : iteratorList) {
             iter.seekToFirst();
         }
@@ -56,6 +58,7 @@ public class MergingIterator extends AbstractIterator<String, String> {
 
     @Override
     public void seekToLast() {
+        assert !this.closed;
         for (Iterator<String, String> iter : iteratorList) {
             iter.seekToLast();
         }
@@ -66,6 +69,7 @@ public class MergingIterator extends AbstractIterator<String, String> {
 
     @Override
     public void seek(String target) {
+        assert !this.closed;
         for (Iterator<String, String> iter : iteratorList) {
             iter.seek(target);
         }
@@ -86,7 +90,7 @@ public class MergingIterator extends AbstractIterator<String, String> {
             for(Iterator<String, String> iter : iteratorList) {
                 if (iter != current) {
                     iter.seek(key());
-                    if (iter.valid() && this.comparator.compare(InternalKey.decode(key()), InternalKey.decode(iter.key())) == 0) {
+                    if (iter.valid() && this.comparator.compare(key().toCharArray(), iter.key().toCharArray()) == 0) {
                         iter.next();
                     }
                 }
@@ -141,6 +145,7 @@ public class MergingIterator extends AbstractIterator<String, String> {
 
     @Override
     public Status status() {
+        assert !this.closed;
         Status status = Status.OK();
 
         for(Iterator<String, String> iter : iteratorList) {
@@ -159,7 +164,7 @@ public class MergingIterator extends AbstractIterator<String, String> {
             if (iter.valid()) {
                 if (smallest == null) {
                     smallest = iter;
-                } else if (comparator.compare(InternalKey.decode(iter.key()), InternalKey.decode(smallest.key())) < 0) {
+                } else if (comparator.compare(iter.key().toCharArray(), smallest.key().toCharArray()) < 0) {
                     smallest = iter;
                 }
             }
@@ -176,7 +181,7 @@ public class MergingIterator extends AbstractIterator<String, String> {
             if (iter.valid()) {
                 if (largest == null) {
                     largest = iter;
-                } else if (comparator.compare(InternalKey.decode(iter.key()), InternalKey.decode(largest.key())) > 0) {
+                } else if (comparator.compare(iter.key().toCharArray(), largest.key().toCharArray()) > 0) {
                     largest = iter;
                 }
             }
