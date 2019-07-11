@@ -302,7 +302,7 @@ public class VersionSet {
                 return false;
             } else {
                 manifestSize = tmp.getValue();
-                if (manifestSize >= targetFileSize()) {
+                if (manifestSize >= VersionUtils.targetFileSize(this.options)) {
                     // Make new compacted MANIFEST if old one is too big
                     return false;
                 }
@@ -352,7 +352,7 @@ public class VersionSet {
     public long numLevelBytes(int level) {
         assert level >= 0;
         assert level < Config.kNumLevels;
-        return totalFileSize(current.files.get(level));
+        return VersionUtils.totalFileSize(current.files.get(level));
     }
 
     public void setLastSequence(long lastSequence) {
@@ -431,7 +431,7 @@ public class VersionSet {
         // and we must not pick one file and drop another older file if the
         // two files overlap.
         if (level > 0) {
-            long limit = maxFileSizeForLevel(this.options, level);
+            long limit = VersionUtils.maxFileSizeForLevel(this.options, level);
             long total = 0;
             for (int i = 0; i < inputs.size(); i++) {
                 total += inputs.get(i).getFileSize();
@@ -460,7 +460,7 @@ public class VersionSet {
                         level + 1,
                         metaData.getSmallest(),
                         metaData.getLargest());
-                long sum = totalFileSize(overlaps);
+                long sum = VersionUtils.totalFileSize(overlaps);
                 if (sum > result) {
                     result = sum;
                 }
@@ -630,7 +630,7 @@ public class VersionSet {
                 // overwrites/deletions).
                 score = version.files.get(level).size() / (double)Config.kL0_CompactionTrigger;
             } else {
-                long levelBytes = totalFileSize(version.files.get(level));
+                long levelBytes = VersionUtils.totalFileSize(version.files.get(level));
                 score = (double)levelBytes / maxBytesForLevel(this.options, level);
             }
 
@@ -715,12 +715,12 @@ public class VersionSet {
         if (!compaction.inputs[1].isEmpty()) {
             Vector<FileMetaData> expand = current.getOverlappingInputs(level, allStart, allEnd);
 
-            long inputs0Size = totalFileSize(compaction.inputs[0]);
-            long inputs1Size = totalFileSize(compaction.inputs[1]);
-            long expanded0Size = totalFileSize(expand);
+            long inputs0Size = VersionUtils.totalFileSize(compaction.inputs[0]);
+            long inputs1Size = VersionUtils.totalFileSize(compaction.inputs[1]);
+            long expanded0Size = VersionUtils.totalFileSize(expand);
 
             if (expand.size() > compaction.inputs[0].size() &&
-                    inputs1Size + expanded0Size < expandedCompactionByteSizeLimit()) {
+                    inputs1Size + expanded0Size < expandedCompactionByteSizeLimit(this.options)) {
                 Pair<InternalKey, InternalKey> pair3 = getRange(expand);
 
                 Vector<FileMetaData> expand1 = current.getOverlappingInputs(
@@ -764,21 +764,7 @@ public class VersionSet {
     // Maximum number of bytes in all compacted files.  We avoid expanding
     // the lower level file set of a compaction if it would make the
     // total compaction cover more than this many bytes.
-    private long expandedCompactionByteSizeLimit() {
-        return 25 * targetFileSize();
-    }
-
-    protected long totalFileSize(Vector<FileMetaData> files) {
-        return files.stream().mapToLong(FileMetaData::getFileSize).sum();
-    }
-
-    long maxFileSizeForLevel(Options options, int level) {
-        // We could vary per level to reduce number of files?
-        return targetFileSize();
-    }
-
-
-    protected long targetFileSize() {
-        return this.options.getMaxFileSize();
+    private long expandedCompactionByteSizeLimit(Options options) {
+        return 25 * VersionUtils.targetFileSize(options);
     }
 }

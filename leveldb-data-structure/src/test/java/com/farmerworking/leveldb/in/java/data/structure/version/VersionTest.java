@@ -517,7 +517,7 @@ public class VersionTest {
 
         doReturn(false).when(spyVersion).overlapInLevel(anyInt(), anyString(), anyString());
         doReturn(new Vector<>()).when(spyVersion).getOverlappingInputs(anyInt(), any(InternalKey.class), any(InternalKey.class));
-        doReturn(100 * version.targetFileSize()).when(spyVersion).totalFileSize(any());
+        doReturn(100 * VersionUtils.targetFileSize(versionSet.getOptions())).when(spyVersion).totalFileSize(any());
         assertEquals(0, spyVersion.pickLevelForMemTableOutput("", ""));
     }
 

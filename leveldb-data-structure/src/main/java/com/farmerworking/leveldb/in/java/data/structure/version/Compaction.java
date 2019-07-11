@@ -44,7 +44,7 @@ public class Compaction {
 
     public Compaction(Options options, int level) {
         this.level = level;
-        this.maxOutputFileSize = maxFileSizeForLevel(options, level);
+        this.maxOutputFileSize = VersionUtils.maxFileSizeForLevel(options, level);
         this.inputVersion = null;
         this.grandparentIndex = 0;
         this.seenKey = false;
@@ -94,8 +94,7 @@ public class Compaction {
         // a very expensive merge later on.
         return (this.numInputFiles(0) == 1 &&
                 this.numInputFiles(1) == 0 &&
-                totalFileSize(this.grandparents) <=
-                        maxGrandParentOverlapBytes());
+                VersionUtils.totalFileSize(this.grandparents) <= maxGrandParentOverlapBytes());
     }
 
     // Add all inputs to this compaction as delete operations to *edit.
@@ -152,22 +151,8 @@ public class Compaction {
         }
     }
 
-    protected long maxFileSizeForLevel(Options options, int level) {
-        // We could vary per level to reduce number of files?
-        return targetFileSize(options);
-    }
-
-    protected long targetFileSize(Options options) {
-        return options.getMaxFileSize();
-    }
-
-    protected long totalFileSize(Vector<FileMetaData> files) {
-        return files.stream().mapToLong(FileMetaData::getFileSize).sum();
-    }
-
-    // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
-    // stop building a single file in a level->level+1 compaction.
-    protected long maxGrandParentOverlapBytes() {
-        return 10 * targetFileSize(inputVersion.versionSetBelongTo.getOptions());
+    // for ease unit test
+    public long maxGrandParentOverlapBytes() {
+        return VersionUtils.maxGrandParentOverlapBytes(inputVersion.versionSetBelongTo.getOptions());
     }
 }

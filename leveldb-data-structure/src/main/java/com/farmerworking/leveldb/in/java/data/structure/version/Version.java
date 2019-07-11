@@ -238,7 +238,7 @@ public class Version {
                             new InternalKey(smallestUserKey, InternalKey.kMaxSequenceNumber, ValueType.kValueTypeForSeek),
                             new InternalKey(largestUserKey, 0, ValueType.kTypeDeletion));
                     long sum = totalFileSize(overlaps);
-                    if (sum > maxGrandParentOverlapBytes()) {
+                    if (sum > VersionUtils.maxGrandParentOverlapBytes(this.versionSetBelongTo.getOptions())) {
                         break;
                     }
 
@@ -293,20 +293,6 @@ public class Version {
         return result;
     }
 
-    // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
-    // stop building a single file in a level->level+1 compaction.
-    private long maxGrandParentOverlapBytes() {
-        return 10 * targetFileSize();
-    }
-
-    protected long targetFileSize() {
-        return versionSetBelongTo.getOptions().getMaxFileSize();
-    }
-
-    protected long totalFileSize(Vector<FileMetaData> files) {
-        return files.stream().mapToLong(FileMetaData::getFileSize).sum();
-    }
-
     protected GetSaver newGetSaver(String userKey) {
         return new GetSaver(userKey, versionSetBelongTo.getInternalKeyComparator().getUserComparator());
     }
@@ -352,5 +338,10 @@ public class Version {
                 }
             }
         }
+    }
+
+    // for ease unit test
+    protected long totalFileSize(Vector<FileMetaData> files) {
+        return VersionUtils.totalFileSize(files);
     }
 }
