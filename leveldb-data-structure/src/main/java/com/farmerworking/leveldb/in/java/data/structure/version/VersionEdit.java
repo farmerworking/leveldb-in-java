@@ -26,6 +26,8 @@ public class VersionEdit {
 
 
     private String comparatorName;
+    // log file whose file number before logNumber is obsolete
+    // log file whose file number after logNumber should be used in recovery progress
     private long logNumber;
     private long prevLogNumber;
     private long nextFileNumber;
@@ -200,7 +202,7 @@ public class VersionEdit {
                     assert abc != null;
                     key = InternalKey.decode(abc.getKey());
                     offset = abc.getValue();
-                    compactPointers.add(new Pair<>(level, key));
+                    addCompactPoint(level, key);
                 } catch (AssertionError e) {
                     msg = "compaction pointer";
                 }

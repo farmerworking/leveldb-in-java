@@ -97,7 +97,7 @@ public class VersionSetBuilder {
     }
 
     private void maybeAddFile(Version version, int level, FileMetaData metaData) {
-        if (levels[level].deletedFiles.stream().filter(item -> item.equals(metaData.getFileNumber())).count() > 0) {
+        if (levels[level].deletedFiles.stream().anyMatch(item -> item.equals(metaData.getFileNumber()))) {
             // File is deleted: do nothing
         } else {
             Vector<FileMetaData> files = version.files.get(level);
