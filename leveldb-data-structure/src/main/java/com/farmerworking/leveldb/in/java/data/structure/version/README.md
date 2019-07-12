@@ -2,7 +2,55 @@
 
 
 
+### Version
+
+Version 负责保存 leveldb 磁盘 sstable 文件的 metadata 信息。leveldb 将 sstable 分为 7 个层级，每个层级可以有多个 sstable 文件，每个 sstable 文件的 metadata 包含如下信息：
+
+1. fileNumber
+2. fileSize
+3. smallestKey
+4. largestKey
+
+
+
+因为 Version 包含所有 sstable 的 metadata 信息，所以，Version 需要履行以下职责：
+
+1. 数据读取 —— iterator 遍历形式 + 指向型 get 形式
+2. Compaction 相关：
+   1. memtable compaction 输出层级判断 —— 是否 overlap，是否 over MaxGrandParentOverlapBytes
+   2. seek compaction —— 更新每个 metadata 里面允许 seek 的次数，判断是否需要发起 seek compaction
+
+
+
+### VersionBuilder
+
+ leveldb 恢复的过程中需要读取多个 VersionEdit 并最后保存在 Version 当中
+
+一种做法：
+
+Version 1 + edit 1 —— Version 2 + edit 2 —— Version 3 + edit 3 …… —— Version final
+
+上述做法可行，但是会产生很多不必要的中间态 Version，因此引入 VersionBuilder 得到以下处理流程：
+
+new VersionBuilder(Version 1) + edit 1 + edit 2 + …… —— Version final
+
+
+
+个人点评：
+
+VersionBuilder 在实际实现上，和一般 Builder 并不一致。
+
+一般 Builder build 的过程中只会修改自身的状态，然后根据自身的状态，在最后产出的阶段对外界状态进行变更
+
+而 leveldb 原生 VersionBuilder 的实现，在 apply edit 阶段会立刻变更 VersionSet 的 compactPoint 状态，在 saveTo 阶段会产出 Version 的状态
+
+
+
 ### VersionEdit
+
+MANIFEST-XXX 文件中包含一系列 VersionEdit 记录，用于 leveldb 恢复
+
+
 
 VersionEdit 包含主要 8 个状态，这 8 个状态又可以根据恢复过程的使用方式分为 2 类：
 
@@ -98,5 +146,5 @@ compactPoint 用于指导哪个文件参与 compaction 过程。
 
 作为输入的文件会被删除，作为输出的文件需要被创建。
 
-deletedFiles 和 newFiles 作为 versionEdit 的内容的一部分，在恢复过程中，按顺序进行推演，可以得到 leveldb 当下磁盘文件的 metadata —— 即每个层次 sstable 文件相关信息 （fileNumber，fileSize，largestKey，smallestKey）
+deletedFiles 和 newFiles 作为 versionEdit 的内容的一部分，在恢复过程中，按顺序进行推演，可以得到 leveldb 当下磁盘文件的 metadata 信息
 
