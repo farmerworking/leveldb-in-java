@@ -24,6 +24,13 @@ public class InternalKey implements Sizable {
         this.type = type;
     }
 
+    public InternalKey(String userKey, long sequence) {
+        this.userKey = userKey;
+        this.userKeyChar = userKey.toCharArray();
+        this.sequence = sequence;
+        this.type = kValueTypeForSeek;
+    }
+
     public InternalKey(char[] userKeyChar, long sequence, ValueType type) {
         this.userKey = new String(userKeyChar);
         this.userKeyChar = userKeyChar;

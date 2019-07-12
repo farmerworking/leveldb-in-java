@@ -29,7 +29,7 @@ public class VersionTest {
 
     @Test
     public void testEmpty() {
-        Version version = new Version(null);
+        Version version = new Version(new VersionSet());
         assertEquals(0, version.numFiles(0));
 
         Vector<Iterator> iterators = version.iterators(new ReadOptions());
@@ -48,7 +48,7 @@ public class VersionTest {
 
         Version version = new Version(versionSet);
 
-        List<FileMetaData> result = version.getFilesToSearchForLevel(0, "a".toCharArray(), 1L);
+        List<FileMetaData> result = version.getFilesToSearchForLevel(0, new InternalKey("a", 1L));
         assertEquals(0, version.numFiles(0));
         assertTrue(result.isEmpty());
 
@@ -65,14 +65,14 @@ public class VersionTest {
                 new InternalKey("n", 50L, ValueType.kTypeValue)));
 
         assertEquals(3, version.numFiles(0));
-        result = version.getFilesToSearchForLevel(0, "h".toCharArray(), 1L);
+        result = version.getFilesToSearchForLevel(0, new InternalKey("h", 1L));
         assertEquals(2, result.size());
 
         // sort by newest
         assertEquals(3, result.get(0).getFileNumber());
         assertEquals(2, result.get(1).getFileNumber());
 
-        result = version.getFilesToSearchForLevel(1, "a".toCharArray(), 1L);
+        result = version.getFilesToSearchForLevel(1, new InternalKey("a", 1L));
         assertEquals(0, version.numFiles(1));
         assertTrue(result.isEmpty());
 
@@ -81,20 +81,49 @@ public class VersionTest {
                 new InternalKey("g", 10L, ValueType.kTypeValue)));
         assertEquals(1, version.numFiles(1));
 
-        result = version.getFilesToSearchForLevel(1, "z".toCharArray(), 1L);
+        result = version.getFilesToSearchForLevel(1, new InternalKey("z", 1L));
         assertTrue(result.isEmpty());
 
-        result = version.getFilesToSearchForLevel(1, "a".toCharArray(), 1L);
+        result = version.getFilesToSearchForLevel(1, new InternalKey("a", 1L));
         assertTrue(result.isEmpty());
 
-        result = version.getFilesToSearchForLevel(1, "d".toCharArray(), 1L);
+        result = version.getFilesToSearchForLevel(1, new InternalKey("d", 1L));
         assertEquals(1, result.size());
         assertEquals(4, result.get(0).getFileNumber());
     }
 
+    @Test
+    public void testGetFilesToSearchForLevel0WithSameUserKeyAndLargerSequence() {
+        VersionSet versionSet = new VersionSet();
+        versionSet.setOptions(new Options());
+        versionSet.setTableCache(new TableCache("tmp", versionSet.getOptions(), 1024));
+        versionSet.setInternalKeyComparator(internalKeyComparator);
+
+        Version version = new Version(versionSet);
+        version.files.get(0).add(new FileMetaData(1L, 1024,
+                new InternalKey("a", 100L, ValueType.kTypeValue),
+                new InternalKey("g", 200L, ValueType.kTypeValue)));
+
+        version.files.get(1).add(new FileMetaData(1L, 1024,
+                new InternalKey("a", 100L, ValueType.kTypeValue),
+                new InternalKey("g", 200L, ValueType.kTypeValue)));
+
+        assertEquals(1, version.files.get(0).size());
+        assertEquals(1, version.getFilesToSearchForLevel(0, new InternalKey("a", 100L)).size());
+        assertEquals(0, version.getFilesToSearchForLevel(0, new InternalKey("a", 101L)).size());
+        assertEquals(1, version.getFilesToSearchForLevel(0, new InternalKey("g", 200L)).size());
+        assertEquals(0, version.getFilesToSearchForLevel(0, new InternalKey("g", 199L)).size());
+
+        assertEquals(1, version.files.get(1).size());
+        assertEquals(1, version.getFilesToSearchForLevel(1, new InternalKey("a", 100L)).size());
+        assertEquals(0, version.getFilesToSearchForLevel(1, new InternalKey("a", 101L)).size());
+        assertEquals(1, version.getFilesToSearchForLevel(1, new InternalKey("g", 200L)).size());
+        assertEquals(0, version.getFilesToSearchForLevel(1, new InternalKey("g", 199L)).size());
+    }
+
     @Test(expected = AssertionError.class)
     public void testRefs() {
-        Version version = new Version(null);
+        Version version = new Version(new VersionSet());
         assertEquals(0, version.refs);
 
         version.ref();
@@ -108,13 +137,13 @@ public class VersionTest {
 
     @Test(expected = AssertionError.class)
     public void testGetOverlappingInputsAssertionError1() {
-        Version version = new Version(null);
+        Version version = new Version(new VersionSet());
         version.getOverlappingInputs(-1, null, null);
     }
 
     @Test(expected = AssertionError.class)
     public void testGetOverlappingInputsAssertionError2() {
-        Version version = new Version(null);
+        Version version = new Version(new VersionSet());
         version.getOverlappingInputs(10, null, null);
     }
 
@@ -181,7 +210,7 @@ public class VersionTest {
 
     @Test
     public void testUpdateStats() {
-        Version version = new Version(null);
+        Version version = new Version(new VersionSet());
 
         assertNull(version.fileToCompact);
         assertEquals(-1, version.fileToCompactLevel);
@@ -224,14 +253,14 @@ public class VersionTest {
         ITableBuilder builder = ITableBuilder.getDefaultImpl(versionSet.getOptions(), filePair.getValue());
 
         List<InternalKey> internalKeyList = new ArrayList<>();
-        List<Pair<String, String>> pairList = new ArrayList<>();
+        List<Pair<Pair<String, Long>, String>> pairList = new ArrayList<>();
         for (int i = 0; i < 50; i++) {
             String userKey = (char)i + TestUtils.randomKey(5);
-            internalKeyList.add(new InternalKey(userKey, sequenceNumber++, ValueType.kTypeValue));
+            internalKeyList.add(new InternalKey(userKey, sequenceNumber, ValueType.kTypeValue));
             String key = internalKeyList.get(internalKeyList.size() - 1).encode();
             String value = TestUtils.randomString(10);
 
-            pairList.add(new Pair<>(userKey, value));
+            pairList.add(new Pair<>(new Pair<>(userKey, sequenceNumber ++), value));
             builder.add(key, value);
         }
 
@@ -244,11 +273,11 @@ public class VersionTest {
         version.files.get(0).add(new FileMetaData(fileNumber, builder.fileSize(), smallest, largest));
         ReadOptions readOptions = new ReadOptions();
         for (int i = 0; i < 50; i++) {
-            Pair<String, String> keyValuePair = pairList.get(i);
+            Pair<Pair<String, Long>, String> keyValuePair = pairList.get(i);
             GetStats stats = new GetStats();
             Pair<Status, String> getPair = version.get(
                     readOptions,
-                    new InternalKey(keyValuePair.getKey(), 0L, ValueType.kValueTypeForSeek),
+                    new InternalKey(keyValuePair.getKey().getKey(), keyValuePair.getKey().getValue(), ValueType.kValueTypeForSeek),
                     stats);
             assertTrue(getPair.getKey().isOk());
             assertEquals(keyValuePair.getValue(), getPair.getValue());
@@ -265,7 +294,7 @@ public class VersionTest {
 
         Version version = spy(new Version(versionSet));
         doReturn(Lists.newArrayList(new FileMetaData(1L, 1L, null, null))).
-                when(version).getFilesToSearchForLevel(anyInt(), any(), anyLong());
+                when(version).getFilesToSearchForLevel(anyInt(), any());
 
         Pair<Status, String> getPair = version.get(new ReadOptions(), new InternalKey("a", 0L, ValueType.kValueTypeForSeek), new GetStats());
         assertTrue(getPair.getKey().IsCorruption());
@@ -283,7 +312,7 @@ public class VersionTest {
 
         Version version = spy(new Version(versionSet));
         doReturn(Lists.newArrayList(new FileMetaData(1L, 1L, null, null))).
-                when(version).getFilesToSearchForLevel(anyInt(), any(), anyLong());
+                when(version).getFilesToSearchForLevel(anyInt(), any());
 
         GetSaver saver = new GetSaver("a", userComparator);
         saver.setState(GetState.kCorrupt);
@@ -305,7 +334,7 @@ public class VersionTest {
 
         Version version = spy(new Version(versionSet));
         doReturn(Lists.newArrayList(new FileMetaData(1L, 1L, null, null))).
-                when(version).getFilesToSearchForLevel(anyInt(), any(), anyLong());
+                when(version).getFilesToSearchForLevel(anyInt(), any());
 
         GetSaver saver = new GetSaver("a", userComparator);
         saver.setState(GetState.kDeleted);
@@ -328,7 +357,7 @@ public class VersionTest {
         doReturn(Lists.newArrayList(
                 new FileMetaData(1L, 1L, null, null),
                 new FileMetaData(2L, 1L, null, null))).
-                when(version).getFilesToSearchForLevel(anyInt(), any(), anyLong());
+                when(version).getFilesToSearchForLevel(anyInt(), any());
 
         GetSaver saver = new GetSaver("a", userComparator);
         saver.setState(GetState.kNotFound);
@@ -354,7 +383,7 @@ public class VersionTest {
         doReturn(Lists.newArrayList(
                 new FileMetaData(1L, 1L, null, null),
                 new FileMetaData(2L, 1L, null, null))).
-                when(version).getFilesToSearchForLevel(anyInt(), any(), anyLong());
+                when(version).getFilesToSearchForLevel(anyInt(), any());
 
         GetSaver saver = new GetSaver("a", userComparator);
         saver.setState(GetState.kNotFound);
@@ -454,17 +483,17 @@ public class VersionTest {
 
     @Test
     public void testForEachOverlapping() {
-        Version version = spy(new Version(null));
+        Version version = spy(new Version(new VersionSet()));
 
         doReturn(Lists.newArrayList(
                 new FileMetaData(1L, 1L, null, null),
                 new FileMetaData(1L, 1L, null, null),
                 new FileMetaData(1L, 1L, null, null),
                 new FileMetaData(1L, 1L, null, null)
-        )).when(version).getFilesToSearchForLevel(anyInt(), any(), anyLong());
+        )).when(version).getFilesToSearchForLevel(anyInt(), any());
 
         final int[] count = {0};
-        version.forEachOverlapping(null, 1L, new Predicate<Pair<Integer, FileMetaData>>() {
+        version.forEachOverlapping(new InternalKey("a", 1L, ValueType.kValueTypeForSeek), new Predicate<Pair<Integer, FileMetaData>>() {
             @Override
             public boolean test(Pair<Integer, FileMetaData> integerFileMetaDataPair) {
                 count[0]++;
@@ -474,7 +503,7 @@ public class VersionTest {
         assertEquals(4 * Config.kNumLevels, count[0]);
 
         count[0] = 0;
-        version.forEachOverlapping(null, 1L, new Predicate<Pair<Integer, FileMetaData>>() {
+        version.forEachOverlapping(new InternalKey("a", 1L, ValueType.kValueTypeForSeek), new Predicate<Pair<Integer, FileMetaData>>() {
             @Override
             public boolean test(Pair<Integer, FileMetaData> integerFileMetaDataPair) {
                 count[0]++;

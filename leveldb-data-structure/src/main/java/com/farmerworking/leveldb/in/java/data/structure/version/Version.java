@@ -3,7 +3,9 @@ package com.farmerworking.leveldb.in.java.data.structure.version;
 import com.farmerworking.leveldb.in.java.api.*;
 import com.farmerworking.leveldb.in.java.api.Comparator;
 import com.farmerworking.leveldb.in.java.api.Iterator;
+import com.farmerworking.leveldb.in.java.data.structure.cache.TableCache;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
+import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
 import com.farmerworking.leveldb.in.java.data.structure.memory.ValueType;
 import com.farmerworking.leveldb.in.java.data.structure.table.GetSaver;
 import com.farmerworking.leveldb.in.java.data.structure.table.GetState;
@@ -15,7 +17,10 @@ import java.util.*;
 import java.util.function.Predicate;
 
 public class Version {
-    VersionSet versionSetBelongTo;
+    final InternalKeyComparator internalKeyComparator;
+    final Options options;
+    private final TableCache tableCache;
+
     Version next;
     Version prev;
 
@@ -40,7 +45,10 @@ public class Version {
     FileRangeHelper fileRangeHelper;
 
     public Version(VersionSet versionSetBelongTo) {
-        this.versionSetBelongTo = versionSetBelongTo;
+        this.internalKeyComparator = versionSetBelongTo.getInternalKeyComparator();
+        this.options = versionSetBelongTo.getOptions();
+        this.tableCache = versionSetBelongTo.getTableCache();
+
         this.next = this;
         this.prev = this;
         this.refs = 0;
@@ -65,7 +73,7 @@ public class Version {
         // Merge all level zero files together since they may overlap
         Vector<FileMetaData> level0 = files.get(0);
         for (int i = 0; i < level0.size(); i++) {
-            iterators.add(versionSetBelongTo.getTableCache().iterator(
+            iterators.add(tableCache.iterator(
                     readOptions,
                     level0.get(i).getFileNumber(),
                     level0.get(i).getFileSize()).getKey());
@@ -76,9 +84,9 @@ public class Version {
         for (int level = 1; level < Config.kNumLevels; level++) {
             if (!files.get(level).isEmpty()) {
                 iterators.add(new TwoLevelIterator<>(
-                        new LevelFileNumIterator(versionSetBelongTo.getInternalKeyComparator(), files.get(level)),
+                        new LevelFileNumIterator(internalKeyComparator, files.get(level)),
                         readOptions,
-                        new TableCacheIndexTransfer(versionSetBelongTo.getTableCache())
+                        new TableCacheIndexTransfer(tableCache)
                 ));
             }
         }
@@ -91,7 +99,7 @@ public class Version {
         stats.setSeekFile(null);
 
         for (int level = 0; level < Config.kNumLevels; level++) {
-            Collection<FileMetaData> filesToSearch = getFilesToSearchForLevel(level, internalKey.userKeyChar, internalKey.sequence);
+            Collection<FileMetaData> filesToSearch = getFilesToSearchForLevel(level, internalKey);
 
             FileMetaData lastFileRead = null;
             Integer lastFileReadLevel = null;
@@ -106,7 +114,7 @@ public class Version {
                 lastFileReadLevel = level;
 
                 GetSaver saver = newGetSaver(internalKey.userKey);
-                Status status = versionSetBelongTo.getTableCache().get(
+                Status status = tableCache.get(
                         options,
                         fileMetaData.getFileNumber(),
                         fileMetaData.getFileSize(),
@@ -154,7 +162,7 @@ public class Version {
     // REQUIRES: lock is held
     public boolean recordReadSample(InternalKey internalKey) {
         MatchObj matchObj = new MatchObj();
-        forEachOverlapping(internalKey.userKeyChar, internalKey.sequence, matchObj);
+        forEachOverlapping(internalKey, matchObj);
         // Must have at least two matches since we want to merge across
         // files. But what if we have a single file that contains many
         // overwrites and deletions?  Should we have another mechanism for
@@ -186,9 +194,9 @@ public class Version {
         }
     }
 
-    protected void forEachOverlapping(char[] userKeyChar, long sequence, Predicate<Pair<Integer, FileMetaData>> predicate) {
+    protected void forEachOverlapping(InternalKey internalKey, Predicate<Pair<Integer, FileMetaData>> predicate) {
         for (int level = 0; level < Config.kNumLevels; level++) {
-            Collection<FileMetaData> filesToSearch = getFilesToSearchForLevel(level, userKeyChar, sequence);
+            Collection<FileMetaData> filesToSearch = getFilesToSearchForLevel(level, internalKey);
 
             for(FileMetaData fileMetaData : filesToSearch) {
                 if (!predicate.test(new Pair<>(level, fileMetaData))) {
@@ -213,7 +221,7 @@ public class Version {
 
     public boolean overlapInLevel(int level, String smallestUserKey, String largestUserKey) {
         return this.fileRangeHelper.isSomeFileOverlapsRange(
-                versionSetBelongTo.getInternalKeyComparator(),
+                this.internalKeyComparator,
                 level > 0,
                 this.files.get(level),
                 smallestUserKey,
@@ -238,7 +246,7 @@ public class Version {
                             new InternalKey(smallestUserKey, InternalKey.kMaxSequenceNumber, ValueType.kValueTypeForSeek),
                             new InternalKey(largestUserKey, 0, ValueType.kTypeDeletion));
                     long sum = totalFileSize(overlaps);
-                    if (sum > VersionUtils.maxGrandParentOverlapBytes(this.versionSetBelongTo.getOptions())) {
+                    if (sum > VersionUtils.maxGrandParentOverlapBytes(this.options)) {
                         break;
                     }
 
@@ -264,7 +272,7 @@ public class Version {
         }
 
         Vector<FileMetaData> result = new Vector<>();
-        Comparator comparator = versionSetBelongTo.getInternalKeyComparator().getUserComparator();
+        Comparator comparator = this.internalKeyComparator.getUserComparator();
         for(int i = 0; i < this.files.get(level).size(); ) {
             FileMetaData metaData = this.files.get(level).get(i++);
             if (begin != null && comparator.compare(metaData.getLargest().userKeyChar, userBegin) < 0) {
@@ -294,10 +302,10 @@ public class Version {
     }
 
     protected GetSaver newGetSaver(String userKey) {
-        return new GetSaver(userKey, versionSetBelongTo.getInternalKeyComparator().getUserComparator());
+        return new GetSaver(userKey, this.internalKeyComparator.getUserComparator());
     }
 
-    protected List<FileMetaData> getFilesToSearchForLevel(int level, char[] userKeyChar, long sequence) {
+    protected List<FileMetaData> getFilesToSearchForLevel(int level, InternalKey internalKey) {
         int fileNums = files.get(level).size();
 
         if (fileNums == 0) {
@@ -305,15 +313,15 @@ public class Version {
         }
 
         Vector<FileMetaData> filesInLevel = files.get(level);
-        Comparator userComparator = versionSetBelongTo.getInternalKeyComparator().getUserComparator();
         if (level == 0) {
             ArrayList<FileMetaData> result = new ArrayList<>();
             for (int i = 0; i < fileNums; i++) {
                 FileMetaData metaData = filesInLevel.get(i);
 
-                if (userComparator.compare(userKeyChar, metaData.getSmallest().userKeyChar) >= 0 &&
-                        userComparator.compare(userKeyChar, metaData.getLargest().userKeyChar) <= 0) {
+                if (this.internalKeyComparator.compare(internalKey, metaData.getSmallest()) >= 0 &&
+                        this.internalKeyComparator.compare(internalKey, metaData.getLargest()) <= 0) {
                     result.add(metaData);
+
                 }
             }
 
@@ -324,14 +332,13 @@ public class Version {
                 return result;
             }
         } else {
-            int index = fileRangeHelper.findFile(versionSetBelongTo.getInternalKeyComparator(), files.get(level),
-                    new InternalKey(userKeyChar, sequence, ValueType.kValueTypeForSeek).encode());
+            int index = fileRangeHelper.findFile(this.internalKeyComparator, files.get(level), internalKey.encode());
 
             if (index >= fileNums) {
                 return new ArrayList<>();
             } else {
                 FileMetaData fileMetaData = filesInLevel.get(index);
-                if (userComparator.compare(userKeyChar, fileMetaData.getSmallest().userKeyChar) < 0) {
+                if (internalKeyComparator.compare(internalKey, fileMetaData.getSmallest()) < 0) {
                     return new ArrayList<>();
                 } else {
                     return Lists.newArrayList(fileMetaData);

@@ -111,7 +111,7 @@ public class Compaction {
     public boolean isBaseLevelForKey(String userKey) {
         // Maybe use binary search to find right entry instead of linear search?
         char[] userKeyChar = userKey.toCharArray();
-        Comparator userComparator = inputVersion.versionSetBelongTo.getInternalKeyComparator().getUserComparator();
+        Comparator userComparator = inputVersion.internalKeyComparator.getUserComparator();
         for (int lvl = this.level + 2; lvl < Config.kNumLevels; lvl++) {
             Vector<FileMetaData> files = inputVersion.files.get(lvl);
             for (; this.levelPtrs[lvl] < files.size();) {
@@ -132,7 +132,7 @@ public class Compaction {
 
     // Returns true iff we should stop building the current output before processing "internal_key".
     public boolean shouldStopBefore(InternalKey internalKey) {
-        InternalKeyComparator comparator = inputVersion.versionSetBelongTo.getInternalKeyComparator();
+        InternalKeyComparator comparator = inputVersion.internalKeyComparator;
         while(grandparentIndex < grandparents.size() &&
                 comparator.compare(internalKey, grandparents.get(grandparentIndex).getLargest()) > 0) {
             if (this.seenKey) {
@@ -153,6 +153,6 @@ public class Compaction {
 
     // for ease unit test
     public long maxGrandParentOverlapBytes() {
-        return VersionUtils.maxGrandParentOverlapBytes(inputVersion.versionSetBelongTo.getOptions());
+        return VersionUtils.maxGrandParentOverlapBytes(inputVersion.options);
     }
 }
