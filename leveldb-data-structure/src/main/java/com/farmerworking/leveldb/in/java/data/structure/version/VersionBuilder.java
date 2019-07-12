@@ -1,5 +1,7 @@
 package com.farmerworking.leveldb.in.java.data.structure.version;
 
+import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
+import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
 import javafx.util.Pair;
 
 import java.util.*;
@@ -7,21 +9,22 @@ import java.util.*;
 // A helper class so we can efficiently apply a whole sequence
 // of edits to a particular state without creating intermediate
 // Versions that contain full copies of the intermediate state.
-public class VersionSetBuilder {
+public class VersionBuilder {
     class LevelState {
         Set<Long> deletedFiles = new HashSet<>();
         SortedSet<FileMetaData> addedFiles;
     }
 
-    private VersionSet versionSet;
+    private InternalKeyComparator internalKeyComparator;
     private Version base;
     private LevelState[] levels = new LevelState[Config.kNumLevels];
+    private String[] compactPointer = new String[Config.kNumLevels];
 
-    public VersionSetBuilder(VersionSet versionSet, Version base) {
-        this.versionSet = versionSet;
+    public VersionBuilder(InternalKeyComparator internalKeyComparator, Version base) {
+        this.internalKeyComparator = internalKeyComparator;
         this.base = base;
 
-        SmallestKeyComparator comparator = new SmallestKeyComparator(versionSet.getInternalKeyComparator());
+        SmallestKeyComparator comparator = new SmallestKeyComparator(this.internalKeyComparator);
         for (int level = 0; level < Config.kNumLevels; level++) {
             levels[level] = new LevelState();
             levels[level].addedFiles = new TreeSet<>(comparator);
@@ -33,7 +36,7 @@ public class VersionSetBuilder {
         // Update compaction pointers
         for (int i = 0; i < edit.getCompactPointers().size(); i++) {
             int level = edit.getCompactPointers().get(i).getKey();
-            versionSet.getCompactPointer()[level] = edit.getCompactPointers().get(i).getValue().encode();
+            this.compactPointer[level] = edit.getCompactPointers().get(i).getValue().encode();
         }
 
         // Delete files
@@ -76,8 +79,13 @@ public class VersionSetBuilder {
     }
 
     // Save the current state in *v.
-    public void saveTo(Version version) {
-        SmallestKeyComparator comparator = new SmallestKeyComparator(versionSet.getInternalKeyComparator());
+    public void saveTo(VersionSet versionSet, Version version) {
+        SmallestKeyComparator comparator = new SmallestKeyComparator(this.internalKeyComparator);
+
+        // save compact point state in versionSet
+        for (int level = 0; level < Config.kNumLevels; level++) {
+            versionSet.compactPointer[level] = this.compactPointer[level];
+        }
 
         for (int level = 0; level < Config.kNumLevels; level++) {
             // Merge the set of added files with the set of pre-existing files.
@@ -104,7 +112,7 @@ public class VersionSetBuilder {
 
             if (level > 0 && !files.isEmpty()) {
                 // Must not overlap
-                assert versionSet.getInternalKeyComparator().compare(files.get(files.size()-1).getLargest(), metaData.getSmallest()) < 0;
+                assert this.internalKeyComparator.compare(files.get(files.size()-1).getLargest(), metaData.getSmallest()) < 0;
             }
 
             metaData.setRefs(metaData.getRefs() + 1);

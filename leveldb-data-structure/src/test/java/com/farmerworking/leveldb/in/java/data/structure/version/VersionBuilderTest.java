@@ -9,7 +9,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
-public class VersionSetBuilderTest {
+public class VersionBuilderTest {
     @Test
     public void test() {
         VersionSet versionSet = new VersionSet();
@@ -26,7 +26,7 @@ public class VersionSetBuilderTest {
                 1L, 1L,
                 new InternalKey("z", 1L, ValueType.kTypeValue), null));
 
-        VersionSetBuilder builder = new VersionSetBuilder(versionSet, version);
+        VersionBuilder builder = new VersionBuilder(versionSet.getInternalKeyComparator(), version);
 
         VersionEdit edit1 = new VersionEdit();
         edit1.getCompactPointers().add(new Pair<>(0, new InternalKey("a", 1L, ValueType.kTypeValue)));
@@ -53,6 +53,12 @@ public class VersionSetBuilderTest {
         builder.apply(edit2);
         builder.apply(edit3);
 
+        Version result = new Version(versionSet);
+        for (int level = 0; level < Config.kNumLevels; level++) {
+            assertEquals(0, result.files.get(level).size());
+        }
+        builder.saveTo(versionSet, result);
+        
         // compact point
         assertNotNull(versionSet.getCompactPointer()[0]);
         assertNotNull(versionSet.getCompactPointer()[1]);
@@ -60,12 +66,6 @@ public class VersionSetBuilderTest {
         for (int level = 2; level < Config.kNumLevels; level++) {
             assertNull(versionSet.getCompactPointer()[level]);
         }
-
-        Version result = new Version(versionSet);
-        for (int level = 0; level < Config.kNumLevels; level++) {
-            assertEquals(0, result.files.get(level).size());
-        }
-        builder.saveTo(result);
 
         // level 0
         assertEquals(1, result.files.get(0).size());

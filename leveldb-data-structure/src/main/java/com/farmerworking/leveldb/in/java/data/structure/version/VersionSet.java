@@ -95,9 +95,9 @@ public class VersionSet {
 
         Version version = new Version(this);
 
-        VersionSetBuilder builder = new VersionSetBuilder(this, current);
+        VersionBuilder builder = new VersionBuilder(this.internalKeyComparator, current);
         builder.apply(edit);
-        builder.saveTo(version);
+        builder.saveTo(this, version);
 
         finalizeVersion(version);
 
@@ -203,7 +203,7 @@ public class VersionSet {
         long lastSequence = 0;
         long logNumber = 0;
         long prevLogNumber = 0;
-        VersionSetBuilder builder = new VersionSetBuilder(this, this.current);
+        VersionBuilder builder = new VersionBuilder(this.internalKeyComparator, this.current);
 
         {
             LogReporter reporter = new LogReporter();
@@ -266,7 +266,7 @@ public class VersionSet {
 
         if (status.isOk()) {
             Version version = new Version(this);
-            builder.saveTo(version);
+            builder.saveTo(this, version);
             finalizeVersion(version);
             appendVersion(version);
 
