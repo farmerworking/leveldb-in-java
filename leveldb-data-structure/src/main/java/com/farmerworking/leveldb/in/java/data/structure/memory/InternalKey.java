@@ -3,6 +3,7 @@ package com.farmerworking.leveldb.in.java.data.structure.memory;
 import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.data.structure.skiplist.Sizable;
 
+import java.util.Arrays;
 import java.util.Objects;
 
 import static com.farmerworking.leveldb.in.java.data.structure.memory.ValueType.kValueTypeForSeek;
@@ -73,5 +74,14 @@ public class InternalKey implements Sizable {
         String userKey = new String(chars, 0, chars.length - length);
         long num = ICoding.getInstance().decodeFixed64(chars, chars.length - length);
         return new InternalKey(userKey, num >>> 8, ValueType.valueOf((int) (num & 0xff)));
+    }
+
+    @Override
+    public String toString() {
+        return "InternalKey{" +
+                "userKey='" + userKey + '\'' +
+                ", sequence=" + sequence +
+                ", type=" + (type == ValueType.kTypeValue ? "insert" : "delete") +
+                '}';
     }
 }
