@@ -19,12 +19,12 @@ public class CompactionTest {
         Compaction compaction = new Compaction(new Options(), 1);
 
         assertEquals(1, compaction.getLevel());
-        assertNull(compaction.getEdit());
         assertNull(compaction.inputVersion);
         assertEquals(0, compaction.numInputFiles(0));
         assertEquals(0, compaction.numInputFiles(1));
         assertTrue(compaction.maxOutputFileSize() > 0);
         assertTrue(compaction.grandparents.isEmpty());
+        assertNotNull(compaction.getEdit());
     }
 
     @Test

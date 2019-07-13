@@ -50,6 +50,7 @@ public class Compaction {
         this.seenKey = false;
         this.overlappedBytes = 0;
         this.grandparents = new Vector<>();
+        this.edit = new VersionEdit();
 
         for (int i = 0; i < 2; i++) {
             inputs[i] = new Vector<>();
