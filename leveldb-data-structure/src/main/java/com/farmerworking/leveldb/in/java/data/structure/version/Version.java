@@ -21,9 +21,6 @@ public class Version {
     final Options options;
     private final TableCache tableCache;
 
-    Version next;
-    Version prev;
-
     // Number of live refs to this version
     int refs;
 
@@ -49,8 +46,6 @@ public class Version {
         this.options = versionSetBelongTo.getOptions();
         this.tableCache = versionSetBelongTo.getTableCache();
 
-        this.next = this;
-        this.prev = this;
         this.refs = 0;
         this.fileToCompact = null;
         this.fileToCompactLevel = -1;

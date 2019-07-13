@@ -38,7 +38,7 @@ public class VersionSet {
     private ILogWriter descriptorLog;
 
     // Head of circular doubly-linked list of versions.
-    private Version dummyVersions;
+    private List<Version> dummyVersions;
     // == dummy_versions_.prev_
     private Version current;
 
@@ -65,7 +65,7 @@ public class VersionSet {
         this.prevLogNumber = 0;
         this.descriptorFile = null;
         this.descriptorLog = null;
-        this.dummyVersions = new Version(this);
+        this.dummyVersions = new ArrayList<>();
         this.current = null;
 
         appendVersion(new Version(this));
@@ -568,7 +568,7 @@ public class VersionSet {
     // Add all files listed in any live version to *live.
     // May also mutate some internal state.
     public void addLiveFiles(Set<Long> live) {
-        for (Version version = dummyVersions.next; version != dummyVersions; version = version.next) {
+        for(Version version : dummyVersions) {
             for (int level = 0; level < Config.kNumLevels; level++) {
                 Vector<FileMetaData> files = version.files.get(level);
                 for (int i = 0; i < files.size(); i++) {
@@ -662,11 +662,7 @@ public class VersionSet {
         assert version != this.current;
 
         this.current = version;
-
-        version.prev = dummyVersions.prev;
-        version.next = dummyVersions;
-        version.prev.next = version;
-        version.next.prev = version;
+        dummyVersions.add(version);
     }
 
     private Pair<InternalKey, InternalKey> getRange(Vector<FileMetaData> inputs) {
