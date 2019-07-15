@@ -41,6 +41,9 @@ public class Version {
 
     FileRangeHelper fileRangeHelper;
 
+    public static int DEFAULT_COMPACTION_SCORE = -1;
+    public static int DEFAULT_COMPACTION_LEVEL = -1;
+
     public Version(VersionSet versionSetBelongTo) {
         this.internalKeyComparator = versionSetBelongTo.getInternalKeyComparator();
         this.options = versionSetBelongTo.getOptions();
@@ -49,8 +52,8 @@ public class Version {
         this.refs = 0;
         this.fileToCompact = null;
         this.fileToCompactLevel = -1;
-        this.compactionScore = -1;
-        this.compactionLevel = -1;
+        this.compactionScore = DEFAULT_COMPACTION_SCORE;
+        this.compactionLevel = DEFAULT_COMPACTION_LEVEL;
         this.fileRangeHelper = new FileRangeHelper();
 
         // init

@@ -1,6 +1,7 @@
 package com.farmerworking.leveldb.in.java.data.structure.version;
 
 import com.farmerworking.leveldb.in.java.api.*;
+import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.data.structure.cache.TableCache;
 import com.farmerworking.leveldb.in.java.data.structure.log.ILogReporter;
 import com.farmerworking.leveldb.in.java.data.structure.log.ILogWriter;
@@ -15,10 +16,8 @@ import javafx.util.Pair;
 import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-import java.util.Vector;
+import java.util.*;
+import java.util.Comparator;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Data
@@ -128,10 +127,10 @@ public class VersionSet {
             if (status.isOk()) {
                 StringBuilder stringBuilder = new StringBuilder();
                 edit.encodeTo(stringBuilder);
-                status = descriptorLog.addRecord(stringBuilder.toString());
+                status = addRecord(stringBuilder.toString());
 
                 if (status.isOk()) {
-                    status = descriptorFile.sync();
+                    status = sync();
                 }
 
                 if (status.isNotOk()) {
@@ -142,7 +141,7 @@ public class VersionSet {
             // If we just created a new descriptor file, install it by writing a
             // new CURRENT file that points to it.
             if (status.isOk() && StringUtils.isNotEmpty(newManifestFile)) {
-                status = FileName.setCurrentFile(this.env, this.dbname, this.manifestFileNumber);
+                status = setCurrentFile();
             }
 
             lock.lock();
@@ -163,20 +162,33 @@ public class VersionSet {
         return status;
     }
 
+    Status setCurrentFile() {
+        return FileName.setCurrentFile(this.env, this.dbname, this.manifestFileNumber);
+    }
+
+    Status sync() {
+        return descriptorFile.sync();
+    }
+
+    Status addRecord(String content) {
+        return descriptorLog.addRecord(content);
+    }
+
     class LogReporter implements ILogReporter {
         Status status = Status.OK();
 
         @Override
         public void corruption(long bytes, Status status) {
             if (this.status.isOk()) {
-                this.status = status;
+                this.status.setCode(status.getCode());
+                this.status.setMessage(status.getMessage());
             }
         }
     }
 
     public Pair<Status, Boolean> recover() {
-        Boolean saveManifest = null;
-        Pair<Status, String> pair = Env.readFileToString(this.env, FileName.currentFileName(this.dbname));
+        Boolean saveManifest = false;
+        Pair<Status, String> pair = readFileToString();
         Status status = pair.getKey();
         if (status.isNotOk()) {
             return new Pair<>(status, saveManifest);
@@ -209,9 +221,9 @@ public class VersionSet {
             LogReporter reporter = new LogReporter();
             reporter.status = status;
 
-            LogReader logReader = new LogReader(tmp.getValue(), reporter, true, 0);
+            LogReader logReader = getLogReader(tmp.getValue(), reporter);
             for (Pair<Boolean, String> logPair = logReader.readRecord(); logPair.getKey() && status.isOk(); logPair = logReader.readRecord()) {
-                VersionEdit edit = new VersionEdit();
+                VersionEdit edit = getVersionEdit();
                 status = edit.decodeFrom(logPair.getValue().toCharArray());
 
                 if (status.isOk()) {
@@ -286,8 +298,20 @@ public class VersionSet {
         return new Pair<>(status, saveManifest);
     }
 
-    public boolean reuseManifest(String dscName, String dscBase) {
-        if (options.isReuseLogs()) {
+    VersionEdit getVersionEdit() {
+        return new VersionEdit();
+    }
+
+    LogReader getLogReader(SequentialFile sequentialFile, LogReporter reporter) {
+        return new LogReader(sequentialFile, reporter, true, 0);
+    }
+
+    Pair<Status, String> readFileToString() {
+        return Env.readFileToString(this.env, FileName.currentFileName(this.dbname));
+    }
+
+    boolean reuseManifest(String dscName, String dscBase) {
+        if (!options.isReuseLogs()) {
             return false;
         }
 
@@ -431,12 +455,12 @@ public class VersionSet {
         // and we must not pick one file and drop another older file if the
         // two files overlap.
         if (level > 0) {
-            long limit = VersionUtils.maxFileSizeForLevel(this.options, level);
+            long limit = maxFileSizeForLevel(level);
             long total = 0;
             for (int i = 0; i < inputs.size(); i++) {
                 total += inputs.get(i).getFileSize();
                 if (total >= limit) {
-                    inputs.subList(0, i + 1);
+                    inputs = new Vector<>(inputs.subList(0, i + 1));
                     break;
                 }
             }
@@ -472,7 +496,7 @@ public class VersionSet {
 
     // Create an iterator that reads over the compaction inputs for "*c".
     // The caller should delete the iterator when no longer needed.
-    public Iterator makeInputIterator(Compaction compaction) {
+    public Iterator<String, String> makeInputIterator(Compaction compaction) {
         ReadOptions readOptions = new ReadOptions();
         readOptions.setVerifyChecksums(options.isParanoidChecks());
 
@@ -494,7 +518,7 @@ public class VersionSet {
                     }
                 } else {
                     // Create concatenating iterator for the files from this level
-                    list.add(num ++, new TwoLevelIterator(
+                    list.add(num ++, new TwoLevelIterator<>(
                             new LevelFileNumIterator(internalKeyComparator, compaction.inputs[which]),
                             readOptions,
                             new TableCacheIndexTransfer(tableCache)));
@@ -502,8 +526,7 @@ public class VersionSet {
             }
         }
         assert num <= space;
-        Iterator result = MergingIterator.newMergingIterator(internalKeyComparator, list);
-        return result;
+        return MergingIterator.newMergingIterator(internalKeyComparator, list);
     }
 
     // Returns true iff some level needs a compaction.
@@ -578,7 +601,7 @@ public class VersionSet {
         }
     }
 
-    private Status writeSnapshot(ILogWriter logWriter) {
+    Status writeSnapshot(ILogWriter logWriter) {
         // TODO: Break up into multiple records to reduce memory usage on recovery?
 
         // Save metadata
@@ -587,7 +610,7 @@ public class VersionSet {
 
         // Save compaction pointers
         for (int level = 0; level < Config.kNumLevels; level++) {
-            if (!compactPointer[level].isEmpty()) {
+            if (StringUtils.isNotEmpty(compactPointer[level])) {
                 InternalKey internalKey = InternalKey.decode(compactPointer[level]);
                 edit.addCompactPoint(level, internalKey);
             }
@@ -608,7 +631,7 @@ public class VersionSet {
         return logWriter.addRecord(builder.toString());
     }
 
-    private void finalizeVersion(Version version) {
+    void finalizeVersion(Version version) {
         // Precomputed best level for next compaction
         int bestLevel = -1;
         double bestScore = -1;
@@ -644,35 +667,32 @@ public class VersionSet {
         version.compactionScore = bestScore;
     }
 
-    private double maxBytesForLevel(Options options, int level) {
+    long maxBytesForLevel(Options options, int level) {
         // Note: the result for level zero is not really used since we set
         // the level-0 compaction threshold based on number of files.
 
         // Result for both level-0 and level-1
-        double result = 10 * 1048576.0;
+        long result = 10 * 1024 * 1024;
         while (level > 1) {
             result *= 10;
             level--;
         }
         return result;
-
     }
 
-    private void appendVersion(Version version) {
+    protected void appendVersion(Version version) {
         assert version != this.current;
 
         this.current = version;
         dummyVersions.add(version);
     }
 
-    private Pair<InternalKey, InternalKey> getRange(Vector<FileMetaData> inputs) {
-        assert !inputs.isEmpty();
+    Pair<InternalKey, InternalKey> getRange(Collection<FileMetaData> inputs) {
+        assert inputs != null && !inputs.isEmpty();
 
         InternalKey smallest = null, largest = null;
-        for (int i = 0; i < inputs.size(); i++) {
-            FileMetaData metaData = inputs.get(i);
-
-            if (i == 0) {
+        for (FileMetaData metaData : inputs) {
+            if (smallest == null && largest == null) {
                 smallest = metaData.getSmallest();
                 largest = metaData.getLargest();
             } else {
@@ -687,14 +707,14 @@ public class VersionSet {
         return new Pair<>(smallest, largest);
     }
 
-    private Pair<InternalKey, InternalKey> getRange2(Vector<FileMetaData> input, Vector<FileMetaData> input1) {
+    Pair<InternalKey, InternalKey> getRange2(Collection<FileMetaData> input, Collection<FileMetaData> input1) {
         Vector<FileMetaData> allResult = new Vector<>();
         allResult.addAll(input);
         allResult.addAll(input1);
         return getRange(allResult);
     }
 
-    private void setupOtherInputs(Compaction compaction) {
+    protected void setupOtherInputs(Compaction compaction) {
         int level = compaction.getLevel();
         Pair<InternalKey, InternalKey> pair = getRange(compaction.inputs[0]);
         InternalKey smallest = pair.getKey();
@@ -760,7 +780,11 @@ public class VersionSet {
     // Maximum number of bytes in all compacted files.  We avoid expanding
     // the lower level file set of a compaction if it would make the
     // total compaction cover more than this many bytes.
-    private long expandedCompactionByteSizeLimit(Options options) {
+    long expandedCompactionByteSizeLimit(Options options) {
         return 25 * VersionUtils.targetFileSize(options);
+    }
+
+    long maxFileSizeForLevel(int level) {
+        return VersionUtils.maxFileSizeForLevel(this.options, level);
     }
 }

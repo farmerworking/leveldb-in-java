@@ -3,6 +3,8 @@ package com.farmerworking.leveldb.in.java.data.structure.version;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import lombok.Data;
 
+import java.util.Objects;
+
 @Data
 public class FileMetaData {
     private int refs = 0;
@@ -26,5 +28,21 @@ public class FileMetaData {
         this.fileSize = metaData.fileSize;
         this.smallest = metaData.smallest;
         this.largest = metaData.largest;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        FileMetaData metaData = (FileMetaData) o;
+        return fileNumber == metaData.fileNumber &&
+                fileSize == metaData.fileSize &&
+                Objects.equals(smallest, metaData.smallest) &&
+                Objects.equals(largest, metaData.largest);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(fileNumber, fileSize, smallest, largest);
     }
 }

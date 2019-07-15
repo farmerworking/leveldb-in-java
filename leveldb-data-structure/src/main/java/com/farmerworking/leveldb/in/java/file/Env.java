@@ -32,7 +32,7 @@ public interface Env {
         }
         SequentialFile file = pair.getValue();
 
-        String result = null;
+        String result = "";
         while(true) {
             Pair<Status, String> readPair = file.read(8192);
             status = readPair.getKey();
