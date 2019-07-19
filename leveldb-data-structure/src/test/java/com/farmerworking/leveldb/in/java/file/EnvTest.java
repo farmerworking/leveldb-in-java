@@ -1,5 +1,6 @@
 package com.farmerworking.leveldb.in.java.file;
 
+import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.common.TestUtils;
 import javafx.util.Pair;
@@ -148,6 +149,34 @@ public abstract class EnvTest {
         assertTrue(contentPair.getKey().isOk());
         assertEquals("hello world!42", contentPair.getValue());
         env.delete(testFileName);
+    }
+
+    @Test
+    public void testGetFileSize() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+        String filename = dbname + "/" + TestUtils.randomString(5);
+
+        Pair<Status, Boolean> tmp = getImpl().delete(filename);
+        assertTrue(tmp.getKey().isOk());
+
+        tmp = getImpl().isFileExists(filename);
+        assertTrue(tmp.getKey().isOk());
+        assertFalse(tmp.getValue());
+
+        Pair<Status, WritableFile> pair = getImpl().newWritableFile(filename);
+        Pair<Status, Long> tmp1 = getImpl().getFileSize(filename);
+        assertTrue(tmp1.getKey().isOk());
+        assertEquals(0L, tmp1.getValue().longValue());
+
+        pair.getValue().append("aaa");
+        pair.getValue().flush();
+        pair.getValue().sync();
+        pair.getValue().close();
+
+        tmp1 = getImpl().getFileSize(filename);
+        assertTrue(tmp1.getKey().isOk());
+        assertEquals(3L, tmp1.getValue().longValue());
     }
 
     private Pair<Status, String> readFileToString(Env env, String fname) {
