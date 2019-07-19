@@ -50,6 +50,11 @@ public class InternalKey implements Sizable {
     }
 
     @Override
+    public int hashCode() {
+        return Objects.hash(this.userKey, this.sequence, this.type);
+    }
+
+    @Override
     public int memoryUsage() {
         return userKey.length() + userKeyChar.length + 8 + 4;
     }
