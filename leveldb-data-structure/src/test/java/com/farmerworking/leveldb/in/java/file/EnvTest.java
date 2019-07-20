@@ -4,12 +4,17 @@ import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.common.TestUtils;
 import javafx.util.Pair;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 import java.util.Random;
 
 import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
 public abstract class EnvTest {
     Env env;
@@ -160,6 +165,10 @@ public abstract class EnvTest {
         Pair<Status, Boolean> tmp = getImpl().delete(filename);
         assertTrue(tmp.getKey().isOk());
 
+        // not exist file
+        Pair<Status, Long> tmp2 = getImpl().getFileSize(filename);
+        assertTrue(tmp2.getKey().IsIOError());
+
         tmp = getImpl().isFileExists(filename);
         assertTrue(tmp.getKey().isOk());
         assertFalse(tmp.getValue());
@@ -177,6 +186,108 @@ public abstract class EnvTest {
         tmp1 = getImpl().getFileSize(filename);
         assertTrue(tmp1.getKey().isOk());
         assertEquals(3L, tmp1.getValue().longValue());
+    }
+
+    @Test
+    public void testRenameFile() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+        String filename1 = dbname + "/" + TestUtils.randomString(5);
+        String filename2 = filename1 + "1";
+
+        assertTrue(getImpl().delete(filename1).getKey().isOk());
+        assertTrue(getImpl().delete(filename2).getKey().isOk());
+
+        assertTrue(getImpl().newWritableFile(filename1).getKey().isOk());
+
+        Pair<Status, Boolean> pair = getImpl().isFileExists(filename1);
+        assertTrue(pair.getKey().isOk());
+        assertTrue(pair.getValue());
+
+        pair = getImpl().isFileExists(filename2);
+        assertTrue(pair.getKey().isOk());
+        assertFalse(pair.getValue());
+
+        assertTrue(getImpl().renameFile(filename1, filename2).isOk());
+
+        pair = getImpl().isFileExists(filename1);
+        assertTrue(pair.getKey().isOk());
+        assertFalse(pair.getValue());
+
+        pair = getImpl().isFileExists(filename2);
+        assertTrue(pair.getKey().isOk());
+        assertTrue(pair.getValue());
+    }
+
+    @Test
+    public void testWriteStringToFileAndReadFileToString() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+        String filename = dbname + "/" + TestUtils.randomString(5);
+
+        assertTrue(getImpl().delete(filename).getKey().isOk());
+
+        String s = "abcdefg";
+        Env.writeStringToFileSync(getImpl(), s, filename);
+
+        Pair<Status, String> pair2 = Env.readFileToString(options.getEnv(), filename);
+        assertTrue(pair2.getKey().isOk());
+        assertEquals(s, pair2.getValue());
+
+        String s2 = StringUtils.repeat(s, 10000);
+        Env.writeStringToFileSync(getImpl(), s2, filename);
+
+        pair2 = Env.readFileToString(options.getEnv(), filename);
+        assertTrue(pair2.getKey().isOk());
+        assertEquals(s2, pair2.getValue());
+    }
+
+    @Test
+    public void testWriteStringToFileErrorCase() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+        String filename = dbname + "/" + TestUtils.randomString(5);
+
+        String s = "abcdefg";
+        Env env = getImpl();
+        Env spyEnv = spy(env);
+        doReturn(new Pair<>(Status.Corruption("force new writable file error"), null)).
+                when(spyEnv).newWritableFile(anyString());
+        Status status = Env.writeStringToFileSync(spyEnv, s, filename);
+        assertTrue(status.IsCorruption());
+        assertEquals("force new writable file error", status.getMessage());
+
+        WritableFile writableFile = mock(WritableFile.class);
+        doReturn(new Pair<>(Status.OK(), writableFile)).when(spyEnv).newWritableFile(anyString());
+
+        // append
+        when(writableFile.append(anyString())).thenReturn(Status.Corruption("force append error"));
+        status = Env.writeStringToFileSync(spyEnv, s, filename);
+        assertTrue(status.IsCorruption());
+        assertEquals("force append error", status.getMessage());
+        assertFalse(spyEnv.isFileExists(filename).getValue());
+
+        // sync
+        when(writableFile.append(anyString())).thenReturn(Status.OK());
+        when(writableFile.sync()).thenReturn(Status.Corruption("force sync error"));
+        status = Env.writeStringToFileSync(spyEnv, s, filename);
+        assertTrue(status.IsCorruption());
+        assertEquals("force sync error", status.getMessage());
+        assertFalse(spyEnv.isFileExists(filename).getValue());
+
+        // close
+        when(writableFile.sync()).thenReturn(Status.OK());
+        when(writableFile.close()).thenReturn(Status.Corruption("force close error"));
+        status = Env.writeStringToFileSync(spyEnv, s, filename);
+        assertTrue(status.IsCorruption());
+        assertEquals("force close error", status.getMessage());
+        assertFalse(spyEnv.isFileExists(filename).getValue());
+
+        // delete
+        doReturn(new Pair<>(Status.Corruption("force delete error"), null)).when(spyEnv).delete(anyString());
+        status = Env.writeStringToFileSync(spyEnv, s, filename);
+        assertTrue(status.IsCorruption());
+        assertEquals("force close error", status.getMessage());
     }
 
     private Pair<Status, String> readFileToString(Env env, String fname) {

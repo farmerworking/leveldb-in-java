@@ -48,4 +48,33 @@ public interface Env {
 
         return new Pair<>(status, result);
     }
+
+    static Status writeStringToFileSync(Env env, String s, String fname) {
+        return doWriteStringToFile(env, s, fname, true);
+    }
+
+    static Status doWriteStringToFile(Env env, String data, String fname, boolean shouldSync) {
+        Pair<Status, WritableFile> pair = env.newWritableFile(fname);
+        Status status = pair.getKey();
+        if (status.isNotOk()) {
+            return pair.getKey();
+        }
+
+        WritableFile file = pair.getValue();
+        status = file.append(data);
+
+        if (status.isOk() && shouldSync) {
+            status = file.sync();
+        }
+
+        if (status.isOk()) {
+            status = file.close();
+        }
+
+        if (status.isNotOk()) {
+            env.delete(fname);
+        }
+
+        return status;
+    }
 }
