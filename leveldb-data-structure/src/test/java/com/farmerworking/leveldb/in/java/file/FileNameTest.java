@@ -1,5 +1,7 @@
 package com.farmerworking.leveldb.in.java.file;
 
+import com.farmerworking.leveldb.in.java.api.Options;
+import com.farmerworking.leveldb.in.java.api.Status;
 import javafx.util.Pair;
 import org.junit.Test;
 
@@ -134,5 +136,22 @@ public class FileNameTest {
             String f = errors[i];
             assertNull(FileName.parseFileName(f));
         }
+    }
+
+    @Test
+    public void testSetCurrentFile() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+
+        String filename = FileName.currentFileName(dbname);
+
+        Status status = FileName.setCurrentFile(options.getEnv(), dbname, 10L);
+        assertTrue(status.isOk());
+
+        assertEquals(String.format("MANIFEST-%d\n", 10L), Env.readFileToString(options.getEnv(), filename).getValue());
+
+        status = FileName.setCurrentFile(options.getEnv(), dbname, 11L);
+        assertTrue(status.isOk());
+        assertEquals(String.format("MANIFEST-%d\n", 11L), Env.readFileToString(options.getEnv(), filename).getValue());
     }
 }
