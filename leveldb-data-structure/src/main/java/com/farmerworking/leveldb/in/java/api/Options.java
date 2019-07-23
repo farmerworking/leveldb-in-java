@@ -97,6 +97,24 @@ public class Options {
     // Default: currently false, but may become true later.
     private boolean reuseLogs;
 
+    // Amount of data to build up in memory (backed by an unsorted log
+    // on disk) before converting to a sorted on-disk file.
+    //
+    // Larger values increase performance, especially during bulk loads.
+    // Up to two write buffers may be held in memory at the same time,
+    // so you may wish to adjust this parameter to control memory usage.
+    // Also, a larger write buffer will result in a longer recovery time
+    // the next time the database is opened.
+    //
+    // Default: 4MB
+    int writeBufferSize = 4 << 20;
+
+    // Number of open files that can be used by the DB.  You may need to
+    // increase this if your database has a large working set (budget
+    // one open file per 2MB of working set).
+    //
+    // Default: 1000
+    int maxOpenFiles = 1000;
 
     public interface Logger {
         public static void log(Logger logger, String msg, String ... args) {
@@ -120,5 +138,7 @@ public class Options {
         this.env = options.env;
         this.maxFileSize = options.maxFileSize;
         this.infoLog = options.infoLog;
+        this.writeBufferSize = options.writeBufferSize;
+        this.maxOpenFiles = options.maxOpenFiles;
     }
 }
