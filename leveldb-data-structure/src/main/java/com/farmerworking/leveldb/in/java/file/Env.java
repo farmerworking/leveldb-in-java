@@ -1,5 +1,6 @@
 package com.farmerworking.leveldb.in.java.file;
 
+import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.Status;
 import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
@@ -22,6 +23,10 @@ public interface Env {
     Pair<Status, Long> getFileSize(String filename);
 
     Status renameFile(String from, String to);
+
+    Status createDir(String name);
+
+    Pair<Status, Options.Logger> newLogger(String logFileName);
 
     static Pair<Status, String> readFileToString(Env env, String fname) {
         Pair<Status, SequentialFile> pair = env.newSequentialFile(fname);

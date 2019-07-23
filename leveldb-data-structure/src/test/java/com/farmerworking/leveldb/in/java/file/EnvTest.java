@@ -289,4 +289,36 @@ public abstract class EnvTest {
         assertTrue(status.IsCorruption());
         assertEquals("force close error", status.getMessage());
     }
+
+    @Test
+    public void testCreateDirectory() {
+        String directory = "/tmp/" + TestUtils.randomString(10);
+
+        Env env = getImpl();
+        Pair<Status, Boolean> pair = env.delete(directory);
+        assertTrue(pair.getKey().isOk());
+
+        Pair<Status, Boolean> pair2 = env.isFileExists(directory);
+        assertTrue(pair2.getKey().isOk());
+        assertFalse(pair2.getValue());
+
+        Status status = env.createDir(directory);
+        assertTrue(status.isOk());
+
+        pair2 = env.isFileExists(directory);
+        assertTrue(pair2.getKey().isOk());
+        assertTrue(pair2.getValue());
+    }
+
+    @Test
+    public void testCreateLogger() {
+        Env env = getImpl();
+        String dbname = env.getTestDirectory().getValue();
+        String logFileName = FileName.infoLogFileName(dbname);
+
+        Pair<Status, Options.Logger> pair = env.newLogger(logFileName);
+        assertTrue(pair.getKey().isOk());
+
+        pair.getValue().log("test info log", "arg1", "arg2", "arg3");
+    }
 }

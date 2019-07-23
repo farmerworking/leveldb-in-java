@@ -1,11 +1,14 @@
 package com.farmerworking.leveldb.in.java.file.impl;
 
+import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.file.Env;
 import com.farmerworking.leveldb.in.java.file.RandomAccessFile;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
 import javafx.util.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.lang.management.ManagementFactory;
@@ -111,5 +114,20 @@ public class DefaultEnv implements Env {
             result = Status.IOError(from);
         }
         return result;
+    }
+
+    @Override
+    public Status createDir(String name) {
+        File file = new File(name);
+        if (file.mkdirs()) {
+            return Status.OK();
+        } else {
+            return Status.IOError("create directory: name error");
+        }
+    }
+
+    @Override
+    public Pair<Status, Options.Logger> newLogger(String logFileName) {
+        return new Pair<>(Status.OK(), new LogImpl(logFileName));
     }
 }
