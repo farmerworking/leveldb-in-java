@@ -14,24 +14,26 @@ import static org.junit.Assert.assertTrue;
 public abstract class FilterPolicyTest {
     protected abstract FilterPolicy getFilterPolicyImpl();
 
+    protected abstract String enhanceKey(String key);
+
     @Test
     public void testEmpty() throws Exception {
         FilterPolicy bloomFilterPolicy = getFilterPolicyImpl();
 
-        assertFalse(bloomFilterPolicy.keyMayMatch("hello", null));
-        assertFalse(bloomFilterPolicy.keyMayMatch("world", ""));
+        assertFalse(bloomFilterPolicy.keyMayMatch(enhanceKey("hello"), null));
+        assertFalse(bloomFilterPolicy.keyMayMatch(enhanceKey("world"), ""));
     }
 
     @Test
     public void testSmall() throws Exception {
         FilterPolicy bloomFilterPolicy = getFilterPolicyImpl();
 
-        String filter = bloomFilterPolicy.createFilter(Lists.newArrayList("hello", "world"));
+        String filter = bloomFilterPolicy.createFilter(Lists.newArrayList(enhanceKey("hello"), enhanceKey("world")));
 
-        assertTrue(bloomFilterPolicy.keyMayMatch("hello", filter));
-        assertTrue(bloomFilterPolicy.keyMayMatch("world", filter));
-        assertFalse(bloomFilterPolicy.keyMayMatch("x", filter));
-        assertFalse(bloomFilterPolicy.keyMayMatch("foo", filter));
+        assertTrue(bloomFilterPolicy.keyMayMatch(enhanceKey("hello"), filter));
+        assertTrue(bloomFilterPolicy.keyMayMatch(enhanceKey("world"), filter));
+        assertFalse(bloomFilterPolicy.keyMayMatch(enhanceKey("x"), filter));
+        assertFalse(bloomFilterPolicy.keyMayMatch(enhanceKey("foo"), filter));
     }
 
     @Test
@@ -83,7 +85,7 @@ public abstract class FilterPolicyTest {
     private String key(int i) {
         char[] buffer = new char[4];
         ICoding.getInstance().encodeFixed32(buffer, 0, i);
-        return new String(buffer);
+        return enhanceKey(new String(buffer));
     }
 
     private double falsePositiveRate(FilterPolicy bloomFilterPolicy, String filter) {
