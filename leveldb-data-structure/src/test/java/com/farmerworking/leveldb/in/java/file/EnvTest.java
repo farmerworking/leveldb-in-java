@@ -119,7 +119,7 @@ public abstract class EnvTest {
         assertTrue(writableFile.append(data).isOk());
         assertTrue(writableFile.close().isOk());
 
-        Pair<Status, String> contentPair = readFileToString(env, testFileName);
+        Pair<Status, String> contentPair = Env.readFileToString(env, testFileName);
         assertTrue(contentPair.getKey().isOk());
         assertEquals("42", contentPair.getValue());
         env.delete(testFileName);
@@ -150,7 +150,7 @@ public abstract class EnvTest {
         assertTrue(appendableFile.append(data).isOk());
         assertTrue(appendableFile.close().isOk());
 
-        Pair<Status, String> contentPair = readFileToString(env, testFileName);
+        Pair<Status, String> contentPair = Env.readFileToString(env, testFileName);
         assertTrue(contentPair.getKey().isOk());
         assertEquals("hello world!42", contentPair.getValue());
         env.delete(testFileName);
@@ -288,31 +288,5 @@ public abstract class EnvTest {
         status = Env.writeStringToFileSync(spyEnv, s, filename);
         assertTrue(status.IsCorruption());
         assertEquals("force close error", status.getMessage());
-    }
-
-    private Pair<Status, String> readFileToString(Env env, String fname) {
-        StringBuilder builder = new StringBuilder();
-        Pair<Status, SequentialFile> pair = env.newSequentialFile(fname);
-        if (pair.getKey().isNotOk()) {
-            return new Pair<>(pair.getKey(), null);
-        }
-
-        SequentialFile file = pair.getValue();
-        int kBufferSize = 8192;
-
-        Status status;
-        while (true) {
-            Pair<Status, String> readPair = file.read(kBufferSize);
-            status = readPair.getKey();
-
-            if (status.isNotOk()) {
-                break;
-            }
-            builder.append(readPair.getValue());
-            if (readPair.getValue().isEmpty()) {
-                break;
-            }
-        }
-        return new Pair<>(status, builder.toString());
     }
 }
