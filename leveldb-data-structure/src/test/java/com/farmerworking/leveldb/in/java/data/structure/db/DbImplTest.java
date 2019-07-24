@@ -1,8 +1,8 @@
 package com.farmerworking.leveldb.in.java.data.structure.db;
 
-import com.farmerworking.leveldb.in.java.api.BytewiseComparator;
 import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -72,5 +72,37 @@ public class DbImplTest {
         assertNotEquals(0, options.getWriteBufferSize());
         assertNotEquals(0, options.getMaxFileSize());
         assertNotEquals(0, options.getBlockSize());
+    }
+
+    @Test
+    public void testDbConstructor() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+
+        DbImpl db = new DbImpl(options, dbname);
+
+        assertNotNull(db.getEnv());
+        assertNotNull(db.getInternalKeyComparator());
+        assertNotNull(db.getInternalFilterPolicy());
+        assertNotNull(db.getOptions());
+        assertNotSame(db.getOptions(), options);
+        assertTrue(StringUtils.isNotEmpty(db.getDbname()));
+        assertNull(db.getDbLock());
+        assertNotNull(db.getMutex());
+        assertNull(db.getShuttingDown());
+        assertNotNull(db.getBgCondition());
+        assertNull(db.getMemtable());
+        assertNull(db.getImmutableMemtable());
+        assertNull(db.getLogFile());
+        assertEquals(0, db.getLogFileNumber());
+        assertNull(db.getLog());
+        assertEquals(0, db.getSeed());
+        assertNotNull(db.getTmpBatch());
+        assertFalse(db.isBgCompactionScheduled());
+        assertNull(db.getManualCompaction());
+        assertNotNull(db.getHasImmutableMemtable());
+        assertFalse(db.getHasImmutableMemtable().get());
+        assertNotNull(db.getTableCache());
+        assertNotNull(db.getVersions());
     }
 }
