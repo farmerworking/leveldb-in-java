@@ -14,6 +14,9 @@ public class FileMetaData {
     private InternalKey smallest; // Smallest internal key served by table
     private InternalKey largest;  // Largest internal key served by table
 
+    public FileMetaData() {
+    }
+
     public FileMetaData(long fileNumber, long fileSize, InternalKey smallest, InternalKey largest) {
         this.fileNumber = fileNumber;
         this.fileSize = fileSize;
