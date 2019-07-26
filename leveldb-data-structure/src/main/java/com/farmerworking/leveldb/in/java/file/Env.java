@@ -5,6 +5,9 @@ import com.farmerworking.leveldb.in.java.api.Status;
 import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
 
+import java.nio.channels.FileLock;
+import java.util.Collection;
+
 public interface Env {
     Pair<Status, WritableFile> newWritableFile(String filename) ;
 
@@ -27,6 +30,10 @@ public interface Env {
     Status createDir(String name);
 
     Pair<Status, Options.Logger> newLogger(String logFileName);
+
+    Pair<Status, Collection<String>> getChildren(String dbname);
+
+    Pair<Status, FileLock> lockFile(String lockFileName);
 
     static Pair<Status, String> readFileToString(Env env, String fname) {
         Pair<Status, SequentialFile> pair = env.newSequentialFile(fname);

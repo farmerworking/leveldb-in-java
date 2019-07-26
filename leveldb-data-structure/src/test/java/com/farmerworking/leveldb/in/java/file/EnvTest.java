@@ -3,6 +3,7 @@ package com.farmerworking.leveldb.in.java.file;
 import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.common.TestUtils;
+import com.farmerworking.leveldb.in.java.file.impl.DefaultEnv;
 import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Before;
@@ -10,6 +11,9 @@ import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+import java.io.File;
+import java.nio.channels.FileLock;
+import java.util.Collection;
 import java.util.Random;
 
 import static org.junit.Assert.*;
@@ -320,5 +324,41 @@ public abstract class EnvTest {
         assertTrue(pair.getKey().isOk());
 
         pair.getValue().log("test info log", "arg1", "arg2", "arg3");
+    }
+
+    @Test
+    public void testGetChildren() {
+        Env env = getImpl();
+        String dbname = env.getTestDirectory().getValue();
+
+        Pair<Status, Collection<String>> pair = env.getChildren(dbname + "notexist");
+        assertTrue(pair.getKey().IsIOError());
+
+        pair = env.getChildren(dbname);
+        assertTrue(pair.getKey().isOk());
+        int size = pair.getValue().size();
+
+        Pair<Status, WritableFile> tmp = env.newWritableFile(dbname + "/" + TestUtils.randomString(6));
+        assertTrue(tmp.getKey().isOk());
+
+        pair = env.getChildren(dbname);
+        assertTrue(pair.getKey().isOk());
+        assertEquals(size + 1, pair.getValue().size());
+    }
+
+    @Test
+    public void testLockFile() {
+        Env env = getImpl();
+        String dbname = env.getTestDirectory().getValue();
+        String lockFileName = FileName.lockFileName(dbname);
+
+        // lock first time
+        Pair<Status, FileLock> pair = env.lockFile(lockFileName);
+        assertTrue(pair.getKey().isOk());
+
+        // lock second time by same jvm
+        pair = env.lockFile(lockFileName);
+        assertTrue(pair.getKey().IsIOError());
+        assertEquals(String.format("lock %s already held by process", lockFileName), pair.getKey().getMessage());
     }
 }

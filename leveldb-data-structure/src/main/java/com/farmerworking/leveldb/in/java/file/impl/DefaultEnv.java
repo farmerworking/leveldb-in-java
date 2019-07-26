@@ -6,17 +6,25 @@ import com.farmerworking.leveldb.in.java.file.Env;
 import com.farmerworking.leveldb.in.java.file.RandomAccessFile;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
+import com.google.common.collect.Lists;
 import javafx.util.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.lang.management.ManagementFactory;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class DefaultEnv implements Env {
+    private Set<String> locks = new HashSet<>();
+
     @Override
     public Pair<Status, WritableFile> newWritableFile(String filename) {
         try {
@@ -129,5 +137,57 @@ public class DefaultEnv implements Env {
     @Override
     public Pair<Status, Options.Logger> newLogger(String logFileName) {
         return new Pair<>(Status.OK(), new LogImpl(logFileName));
+    }
+
+    @Override
+    public Pair<Status, Collection<String>> getChildren(String dbname) {
+        File directory = new File(dbname);
+
+        if (!directory.exists()) {
+            return new Pair<>(Status.IOError(dbname), null);
+        }
+
+        File[] files = directory.listFiles();
+        List<String> result = Lists.newArrayList();
+        if (files == null) {
+            return new Pair<>(Status.OK(), result);
+        } else {
+            for(File file : files) {
+                result.add(file.getName());
+            }
+            return new Pair<>(Status.OK(), result);
+        }
+    }
+
+    @Override
+    public Pair<Status, FileLock> lockFile(String lockFileName) {
+        Path path = Paths.get(lockFileName);
+        try {
+            FileChannel channel = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
+
+            if (!addLock(lockFileName)) {
+                channel.close();
+                return new Pair<>(Status.IOError(String.format("lock %s already held by process", lockFileName)), null);
+            }
+
+            FileLock lock = channel.tryLock();
+            if (lock == null) {
+                channel.close();
+                removeLock(lockFileName);
+                return new Pair<>(Status.IOError("lock " + lockFileName), null);
+            }
+
+            return new Pair<>(Status.OK(), lock);
+        } catch (IOException e) {
+            return new Pair<>(Status.IOError(lockFileName), null);
+        }
+    }
+
+    private synchronized boolean addLock(String lockFileName) {
+        return locks.add(lockFileName);
+    }
+
+    private synchronized boolean removeLock(String lockFileName) {
+        return locks.remove(lockFileName);
     }
 }
