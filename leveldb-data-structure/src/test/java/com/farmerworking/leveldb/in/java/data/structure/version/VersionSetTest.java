@@ -294,26 +294,25 @@ public class VersionSetTest {
     public void testAddLiveFiles() {
         VersionSet versionSet = new VersionSet("test", new Options(), null, null);
 
-        Set<Long> liveFiles = new HashSet<>();
-        versionSet.addLiveFiles(liveFiles);
+        Set<Long> liveFiles = versionSet.getLiveFiles();
         assertTrue(liveFiles.isEmpty());
 
         Version version = new Version(versionSet);
         version.files.get(0).add(new FileMetaData(1, 0L, null, null));
         versionSet.appendVersion(version);
-        versionSet.addLiveFiles(liveFiles);
+        liveFiles = versionSet.getLiveFiles();
         assertEquals(1, liveFiles.size());
 
         version = new Version(versionSet);
         version.files.get(1).add(new FileMetaData(2, 0L, null, null));
         versionSet.appendVersion(version);
-        versionSet.addLiveFiles(liveFiles);
+        liveFiles = versionSet.getLiveFiles();
         assertEquals(2, liveFiles.size());
 
         version = new Version(versionSet);
         version.files.get(2).add(new FileMetaData(2, 0L, null, null));
         versionSet.appendVersion(version);
-        versionSet.addLiveFiles(liveFiles);
+        liveFiles = versionSet.getLiveFiles();
         assertEquals(2, liveFiles.size());
     }
 

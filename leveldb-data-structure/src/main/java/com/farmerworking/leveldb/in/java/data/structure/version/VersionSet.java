@@ -590,15 +590,17 @@ public class VersionSet {
 
     // Add all files listed in any live version to *live.
     // May also mutate some internal state.
-    public void addLiveFiles(Set<Long> live) {
+    public Set<Long> getLiveFiles() {
+        Set<Long> result = new HashSet<>();
         for(Version version : dummyVersions) {
             for (int level = 0; level < Config.kNumLevels; level++) {
                 Vector<FileMetaData> files = version.files.get(level);
                 for (int i = 0; i < files.size(); i++) {
-                    live.add(files.get(i).getFileNumber());
+                    result.add(files.get(i).getFileNumber());
                 }
             }
         }
+        return result;
     }
 
     Status writeSnapshot(ILogWriter logWriter) {
