@@ -17,8 +17,8 @@ import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.*;
-import java.util.concurrent.locks.Lock;
-
+import java.util.Comparator;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Data
 public class VersionSet {
@@ -75,8 +75,8 @@ public class VersionSet {
     // current version.  Will release *mu while actually writing to the file.
     // REQUIRES: *mu is held on entry.
     // REQUIRES: no other thread concurrently calls LogAndApply()
-    public Status logAndApply(VersionEdit edit, Lock lock) {
-        assert lock.tryLock();
+    public Status logAndApply(VersionEdit edit, ReentrantLock lock) {
+        assert lock.isHeldByCurrentThread();
 
         if (edit.isHasLogNumber()) {
             assert edit.getLogNumber() >= this.logNumber;
