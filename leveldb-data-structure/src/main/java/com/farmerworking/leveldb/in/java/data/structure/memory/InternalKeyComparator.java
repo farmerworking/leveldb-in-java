@@ -80,11 +80,11 @@ public class InternalKeyComparator implements Comparator{
 
     @Override
     public char[] findShortestSeparator(char[] a, char[] b) {
-        throw new UnsupportedOperationException();
+        return this.findShortestSeparator(InternalKey.decode(a), InternalKey.decode(b)).encode().toCharArray();
     }
 
     @Override
     public char[] findShortSuccessor(char[] a) {
-        throw new UnsupportedOperationException();
+        return this.findShortSuccessor(InternalKey.decode(a)).encode().toCharArray();
     }
 }

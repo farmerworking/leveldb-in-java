@@ -1,5 +1,6 @@
 package com.farmerworking.leveldb.in.java.data.structure.db;
 
+import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.data.structure.cache.ShardedLRUCache;
@@ -7,9 +8,9 @@ import com.farmerworking.leveldb.in.java.data.structure.cache.TableCache;
 import com.farmerworking.leveldb.in.java.data.structure.log.ILogWriter;
 import com.farmerworking.leveldb.in.java.data.structure.log.LogWriter;
 import com.farmerworking.leveldb.in.java.data.structure.memory.IMemtable;
+import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
-import com.farmerworking.leveldb.in.java.data.structure.version.VersionEdit;
-import com.farmerworking.leveldb.in.java.data.structure.version.VersionSet;
+import com.farmerworking.leveldb.in.java.data.structure.version.*;
 import com.farmerworking.leveldb.in.java.data.structure.writebatch.WriteBatch;
 import com.farmerworking.leveldb.in.java.file.Env;
 import com.farmerworking.leveldb.in.java.file.FileName;
@@ -19,6 +20,8 @@ import lombok.Data;
 
 import java.lang.reflect.Field;
 import java.nio.channels.FileLock;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -46,7 +49,7 @@ public class DBImpl {
     private FileLock dbLock;
 
     // State below is protected by mutex
-    private Lock mutex;
+    private ReentrantLock mutex;
     private AtomicBoolean shuttingDown;
     private Condition bgCondition; // Signalled when background work finishes
     private IMemtable memtable;
@@ -58,11 +61,18 @@ public class DBImpl {
     private long seed; // For sampling
     private WriteBatch tmpBatch;
 
+    // Set of table files to protect from deletion because they are
+    // part of ongoing compactions.
+    Set<Long> pendingOutputs = new HashSet<>();
+
     // Has a background compaction been scheduled or is running?
     private boolean bgCompactionScheduled;
     private ManualCompaction manualCompaction;
 
     private VersionSet versions;
+
+    private CompactionStats[] stats = new CompactionStats[Config.kNumLevels];
+    private Builder builder = new Builder();
 
     public DBImpl(Options rawOptions, String dbname) {
         this.env = rawOptions.getEnv();
@@ -89,6 +99,10 @@ public class DBImpl {
         this.tableCache = new TableCache(dbname, this.options, tableCacheSize);
 
         this.versions = new VersionSet(this.dbname, this.options, this.tableCache, this.internalKeyComparator);
+
+        for (int i = 0; i < Config.kNumLevels; i++) {
+            this.stats[i] = new CompactionStats();
+        }
     }
 
     public Status newDB() {
@@ -174,5 +188,52 @@ public class DBImpl {
         } catch (Exception e) {
             throw new RuntimeException("sanitize option field error", e);
         }
+    }
+
+    Status writeLevel0Table(IMemtable memtable, VersionEdit edit, Version base) {
+        assert this.mutex.isHeldByCurrentThread();
+        long start = System.nanoTime();
+        FileMetaData metaData = new FileMetaData();
+        metaData.setFileNumber(this.versions.newFileNumber());
+
+        this.pendingOutputs.add(metaData.getFileNumber());
+        Iterator<InternalKey, String> iter = memtable.iterator();
+        Options.Logger.log(this.options.getInfoLog(), String.format("Level-0 table %d: started", metaData.getFileNumber()));
+        Status status;
+        {
+            unlock();
+            status = builder.buildTable(this.dbname, this.env, this.options, this.tableCache, iter, metaData);
+            lock();
+        }
+
+        Options.Logger.log(this.options.getInfoLog(), String.format("Level-0 table %d: %d bytes %s", metaData.getFileNumber(), metaData.getFileSize(), status.toString()));
+        this.pendingOutputs.remove(metaData.getFileNumber());
+
+        // Note that if file_size is zero, the file has been deleted and
+        // should not be added to the manifest.
+        int level = 0;
+        if (status.isOk() && metaData.getFileSize() > 0) {
+            String minUserKey = metaData.getSmallest().userKey;
+            String maxUserKey = metaData.getLargest().userKey;
+
+            if (base != null) {
+                level = base.pickLevelForMemTableOutput(minUserKey, maxUserKey);
+            }
+
+            edit.addFile(level, metaData.getFileNumber(), metaData.getFileSize(), metaData.getSmallest(), metaData.getLargest());
+        }
+
+        CompactionStats stats = new CompactionStats();
+        stats.setMicros(System.nanoTime() - start);
+        stats.setBytesWritten(metaData.getFileSize());
+        this.stats[level].add(stats);
+        return status;
+    }
+    void lock() {
+        this.mutex.lock();
+    }
+
+    void unlock() {
+        this.mutex.unlock();
     }
 }
