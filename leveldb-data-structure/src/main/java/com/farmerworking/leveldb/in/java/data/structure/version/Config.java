@@ -1,7 +1,7 @@
 package com.farmerworking.leveldb.in.java.data.structure.version;
 
 public class Config {
-    static int kNumLevels = 7;
+    public static int kNumLevels = 7;
 
     // Level-0 compaction is started when we hit this many files.
     static int kL0_CompactionTrigger = 4;
