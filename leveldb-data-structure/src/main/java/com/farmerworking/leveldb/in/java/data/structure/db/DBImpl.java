@@ -5,15 +5,17 @@ import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.data.structure.cache.ShardedLRUCache;
 import com.farmerworking.leveldb.in.java.data.structure.cache.TableCache;
-import com.farmerworking.leveldb.in.java.data.structure.log.ILogWriter;
-import com.farmerworking.leveldb.in.java.data.structure.log.LogWriter;
+import com.farmerworking.leveldb.in.java.data.structure.log.*;
 import com.farmerworking.leveldb.in.java.data.structure.memory.IMemtable;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
 import com.farmerworking.leveldb.in.java.data.structure.version.*;
+import com.farmerworking.leveldb.in.java.data.structure.memory.Memtable;
+import com.farmerworking.leveldb.in.java.data.structure.writebatch.MemTableInserter;
 import com.farmerworking.leveldb.in.java.data.structure.writebatch.WriteBatch;
 import com.farmerworking.leveldb.in.java.file.Env;
 import com.farmerworking.leveldb.in.java.file.FileName;
+import com.farmerworking.leveldb.in.java.file.SequentialFile;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
 import javafx.util.Pair;
 import lombok.Data;
@@ -24,7 +26,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Data
@@ -59,7 +60,6 @@ public class DBImpl {
     private long logFileNumber;
     private ILogWriter log;
     private long seed; // For sampling
-    private WriteBatch tmpBatch;
 
     // Set of table files to protect from deletion because they are
     // part of ongoing compactions.
@@ -90,7 +90,6 @@ public class DBImpl {
         this.logFileNumber = 0;
         this.log = null;
         this.seed = 0;
-        this.tmpBatch = new WriteBatch();
         this.bgCompactionScheduled = false;
         this.manualCompaction = null;
 
@@ -190,6 +189,139 @@ public class DBImpl {
         }
     }
 
+    @Data
+    class RecoverLogFileResult {
+        private Status status;
+        private boolean saveManifest;
+        private Long maxSequence;
+
+        public RecoverLogFileResult(Status status) {
+            this.status = status;
+        }
+
+        public RecoverLogFileResult(Status status, boolean saveManifest, Long maxSequence) {
+            this.status = status;
+            this.saveManifest = saveManifest;
+            this.maxSequence = maxSequence;
+        }
+    }
+
+    RecoverLogFileResult recoverLogFile(long logFileNumber, boolean lastLog, VersionEdit edit) {
+        assert this.mutex.isHeldByCurrentThread();
+
+        String filename = FileName.logFileName(this.dbname, logFileNumber);
+        Pair<Status, SequentialFile> pair = this.env.newSequentialFile(filename);
+        Status status = pair.getKey();
+        if (status.isNotOk()) {
+            status = maybeIgnoreError(status);
+            return new RecoverLogFileResult(status);
+        }
+
+        LogReporter logReporter = new LogReporter(this.options.getInfoLog(), filename, this.options.isParanoidChecks() ? status : null);
+        // We intentionally make log::Reader do checksumming even if
+        // paranoid_checks==false so that corruptions cause entire commits
+        // to be skipped instead of propagating bad information (like overly
+        // large sequence numbers).
+        ILogReader logReader = new LogReader(pair.getValue(), logReporter, true, 0);
+        Options.Logger.log(this.options.getInfoLog(), String.format("Recovering log %d", logFileNumber));
+
+        Long maxSequence = null;
+        boolean saveManifest = false;
+        int compactions = 0;
+        Memtable memtable = null;
+        WriteBatch batch = new WriteBatch();
+
+        // Read all the records and add to a memtable
+        for(Pair<Boolean, String> read = readLogRecord(logReader);
+            read.getKey() && status.isOk();
+            read = readLogRecord(logReader)) {
+            if (read.getValue().length() < WriteBatch.kHeaderSize) {
+                logReporter.corruption(read.getValue().length(), Status.Corruption("log record too small"));
+                continue;
+            }
+
+            batch.decode(read.getValue().toCharArray());
+            if (memtable == null) {
+                memtable = new Memtable(this.internalKeyComparator);
+            }
+
+            MemTableInserter memTableInserter = new MemTableInserter(batch.getSequence(), memtable);
+            status = iterateBatch(batch, memTableInserter);
+            status = maybeIgnoreError(status);
+            if (status.isNotOk()) {
+                break;
+            }
+
+            long lastSeq = batch.getSequence() + batch.getCount() - 1;
+            if (maxSequence == null || lastSeq > maxSequence) {
+                maxSequence = lastSeq;
+            }
+
+            if (memtable.approximateMemoryUsage() > getWriteBufferSize()) {
+                compactions ++;
+                saveManifest = true;
+                status = writeLevel0Table(memtable, edit, null);
+                memtable = null;
+                if (status.isNotOk()) {
+                    // Reflect errors immediately so that conditions like full
+                    // file-systems cause the DB::Open() to fail.
+                    break;
+                }
+            }
+        }
+
+        if (status.isOk() && this.options.isReuseLogs() && lastLog && compactions == 0) {
+            assert this.logFile == null;
+            assert this.log == null;
+            assert this.memtable == null;
+
+            Pair<Status, Long> fileSize = getFileSize(filename);
+            Pair<Status, WritableFile> append = getAppendableFile(filename);
+            if (fileSize.getKey().isOk() && append.getKey().isOk()) {
+                this.logFile = append.getValue();
+                Long logFileSize = fileSize.getValue();
+
+                Options.Logger.log(this.options.getInfoLog(), String.format("Reusing old log %s", filename));
+                this.log = new LogWriter(this.logFile, logFileSize);
+                this.logFileNumber = logFileNumber;
+
+                if (memtable != null) {
+                    this.memtable = memtable;
+                    memtable = null;
+                } else {
+                    // mem can be NULL if lognum exists but was empty.
+                    this.memtable = new Memtable(this.internalKeyComparator);
+                }
+            }
+        }
+
+        if (memtable != null) {
+            // mem did not get reused; compact it.
+            if (status.isOk()) {
+                saveManifest = true;
+                status = writeLevel0Table(memtable, edit, null);
+            }
+        }
+
+        return new RecoverLogFileResult(status, saveManifest, maxSequence);
+    }
+
+    Pair<Status, WritableFile> getAppendableFile(String filename) {
+        return this.env.newAppendableFile(filename);
+    }
+
+    Pair<Status, Long> getFileSize(String filename) {
+        return this.env.getFileSize(filename);
+    }
+
+    int getWriteBufferSize() {
+        return this.options.getWriteBufferSize();
+    }
+
+    Status iterateBatch(WriteBatch batch, MemTableInserter memTableInserter) {
+        return batch.iterate(memTableInserter);
+    }
+
     Status writeLevel0Table(IMemtable memtable, VersionEdit edit, Version base) {
         assert this.mutex.isHeldByCurrentThread();
         long start = System.nanoTime();
@@ -245,5 +377,9 @@ public class DBImpl {
 
     void unlock() {
         this.mutex.unlock();
+    }
+
+    Pair<Boolean, String> readLogRecord(ILogReader logReader) {
+        return logReader.readRecord();
     }
 }

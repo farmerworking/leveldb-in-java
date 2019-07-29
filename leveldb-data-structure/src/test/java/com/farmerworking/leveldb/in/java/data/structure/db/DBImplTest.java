@@ -14,6 +14,7 @@ import com.farmerworking.leveldb.in.java.data.structure.version.Config;
 import com.farmerworking.leveldb.in.java.data.structure.version.FileMetaData;
 import com.farmerworking.leveldb.in.java.data.structure.version.Version;
 import com.farmerworking.leveldb.in.java.data.structure.version.VersionEdit;
+import com.farmerworking.leveldb.in.java.data.structure.writebatch.WriteBatch;
 import com.farmerworking.leveldb.in.java.file.Env;
 import com.farmerworking.leveldb.in.java.file.FileName;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
@@ -23,6 +24,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+
 
 import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -118,7 +120,6 @@ public class DBImplTest {
         assertEquals(0, db.getLogFileNumber());
         assertNull(db.getLog());
         assertEquals(0, db.getSeed());
-        assertNotNull(db.getTmpBatch());
         assertFalse(db.isBgCompactionScheduled());
         assertNull(db.getManualCompaction());
         assertNotNull(db.getHasImmutableMemtable());
@@ -346,6 +347,7 @@ public class DBImplTest {
         assertTrue(edit.getNewFiles().isEmpty());
         assertEquals(before, db.getStats()[0].getBytesWritten());
     }
+
     @Test
     public void testMaybeIgnoreError() {
         Options options = new Options();
@@ -361,5 +363,340 @@ public class DBImplTest {
         db.getOptions().setParanoidChecks(true);
         status = db.maybeIgnoreError(Status.Corruption(""));
         assertTrue(status.IsCorruption());
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testRecoverLogFileWithoutLock() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+
+        DBImpl db = new DBImpl(options, dbname);
+        db.recoverLogFile(0L, true, null);
+    }
+
+    @Test
+    public void testRecoverLogFileOpenLogFileError() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+        Env spyEnv = spy(options.getEnv());
+        options.setEnv(spyEnv);
+
+        DBImpl db = new DBImpl(options, dbname);
+        db.getMutex().lock();
+
+        doReturn(new Pair<>(Status.Corruption("force sequence file open error"), null)).when(spyEnv).newSequentialFile(anyString());
+        DBImpl.RecoverLogFileResult result = db.recoverLogFile(5L, true, null);
+        assertTrue(result.getStatus().isOk());
+
+        db.getOptions().setParanoidChecks(true);
+        result = db.recoverLogFile(5L, true, null);
+        assertTrue(result.getStatus().IsCorruption());
+        assertEquals("force sequence file open error", result.getStatus().getMessage());
+    }
+
+    @Test
+    public void testRecoverLogFileReadLogRecordError() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+
+        options.getEnv().newWritableFile(FileName.logFileName(dbname, 5));
+
+        DBImpl db = new DBImpl(options, dbname);
+        db.getMutex().lock();
+
+        DBImpl spyDB = spy(db);
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                LogReader logReader = invocation.getArgument(0);
+                logReader.getReporter().corruption(100L, Status.Corruption("force log read error"));
+                return new Pair<>(false, null);
+            }
+        }).when(spyDB).readLogRecord(any(LogReader.class));
+        DBImpl.RecoverLogFileResult result = spyDB.recoverLogFile(5L, true, null);
+        assertTrue(result.getStatus().isOk());
+        assertNull(result.getMaxSequence());
+        assertFalse(result.isSaveManifest());
+
+        db.getOptions().setParanoidChecks(true);
+        result = spyDB.recoverLogFile(5L, true, null);
+        assertTrue(result.getStatus().IsCorruption());
+        assertEquals("force log read error", result.getStatus().getMessage());
+        assertNull(result.getMaxSequence());
+        assertFalse(result.isSaveManifest());
+    }
+
+    @Test
+    public void testRecoverLogFileMalformedLogRecord() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+
+        options.getEnv().newWritableFile(FileName.logFileName(dbname, 5));
+
+        DBImpl db = new DBImpl(options, dbname);
+        db.getMutex().lock();
+
+        DBImpl spyDB = spy(db);
+        doReturn(new Pair<>(true, "")).doCallRealMethod().when(spyDB).readLogRecord(any(LogReader.class));
+        DBImpl.RecoverLogFileResult result = spyDB.recoverLogFile(5L, true, null);
+        assertTrue(result.getStatus().isOk());
+        assertNull(result.getMaxSequence());
+        assertFalse(result.isSaveManifest());
+
+        db.getOptions().setParanoidChecks(true);
+        doReturn(new Pair<>(true, "")).doCallRealMethod().when(spyDB).readLogRecord(any(LogReader.class));
+        result = spyDB.recoverLogFile(5L, true, null);
+        assertTrue(result.getStatus().IsCorruption());
+        assertEquals("log record too small", result.getStatus().getMessage());
+        assertNull(result.getMaxSequence());
+        assertFalse(result.isSaveManifest());
+    }
+
+    @Test
+    public void testRecoverLogFileWriteBatchIterateError() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+
+        options.getEnv().newWritableFile(FileName.logFileName(dbname, 5));
+
+        DBImpl db = new DBImpl(options, dbname);
+        db.getMutex().lock();
+
+        WriteBatch batch = new WriteBatch();
+        batch.put("foo", "bar");
+        batch.setSequence(100);
+
+        DBImpl spyDB = spy(db);
+        doReturn(new Pair<>(true, String.valueOf(batch.encode()))).doCallRealMethod().when(spyDB).readLogRecord(any());
+        doReturn(Status.Corruption("force write batch iterate error")).when(spyDB).iterateBatch(any(), any());
+        DBImpl.RecoverLogFileResult result = spyDB.recoverLogFile(5L, true, null);
+        assertTrue(result.getStatus().isOk());
+        assertEquals(100L, result.getMaxSequence().longValue());
+        assertTrue(result.isSaveManifest());
+
+        db.getOptions().setParanoidChecks(true);
+        doReturn(new Pair<>(true, String.valueOf(batch.encode()))).doCallRealMethod().when(spyDB).readLogRecord(any());
+        result = spyDB.recoverLogFile(5L, true, null);
+        assertTrue(result.getStatus().IsCorruption());
+        assertEquals("force write batch iterate error", result.getStatus().getMessage());
+        assertNull(result.getMaxSequence());
+        assertFalse(result.isSaveManifest());
+    }
+
+    @Test
+    public void testRecoverLogFileWriteLevel0TableError() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+
+        options.getEnv().newWritableFile(FileName.logFileName(dbname, 5));
+
+        DBImpl db = new DBImpl(options, dbname);
+        db.getMutex().lock();
+
+        WriteBatch batch = new WriteBatch();
+        batch.put("foo", "bar");
+        batch.setSequence(100);
+
+        DBImpl spyDB = spy(db);
+        doReturn(Status.Corruption("force write level0 table error")).when(spyDB).writeLevel0Table(any(), any(), any());
+        doReturn(new Pair<>(true, String.valueOf(batch.encode()))).doCallRealMethod().when(spyDB).readLogRecord(any());
+        doReturn(0).when(spyDB).getWriteBufferSize();
+
+        DBImpl.RecoverLogFileResult result = spyDB.recoverLogFile(5L, true, null);
+        assertEquals("force write level0 table error", result.getStatus().getMessage());
+        assertEquals(100L, result.getMaxSequence().longValue());
+        assertTrue(result.isSaveManifest());
+
+        doCallRealMethod().when(spyDB).getWriteBufferSize();
+        doReturn(new Pair<>(true, String.valueOf(batch.encode()))).doCallRealMethod().when(spyDB).readLogRecord(any());
+        result = spyDB.recoverLogFile(5L, true, null);
+        assertEquals("force write level0 table error", result.getStatus().getMessage());
+        assertEquals(100L, result.getMaxSequence().longValue());
+        assertTrue(result.isSaveManifest());
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testRecoverLogFileReuseLogAssertion1() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+        options.setReuseLogs(true);
+
+        options.getEnv().newWritableFile(FileName.logFileName(dbname, 5));
+
+        DBImpl db = new DBImpl(options, dbname);
+        db.getMutex().lock();
+
+        db.setLogFile(new WritableFile() {
+            @Override
+            public Status append(String data) {
+                return null;
+            }
+
+            @Override
+            public Status flush() {
+                return null;
+            }
+
+            @Override
+            public Status close() {
+                return null;
+            }
+
+            @Override
+            public Status sync() {
+                return null;
+            }
+        });
+        DBImpl.RecoverLogFileResult result = db.recoverLogFile(5L, true, null);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testRecoverLogFileReuseLogAssertion2() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+        options.setReuseLogs(true);
+
+        options.getEnv().newWritableFile(FileName.logFileName(dbname, 5));
+
+        DBImpl db = new DBImpl(options, dbname);
+        db.getMutex().lock();
+
+        db.setLog(new ILogWriter() {
+            @Override
+            public Status addRecord(String data) {
+                return null;
+            }
+        });
+        DBImpl.RecoverLogFileResult result = db.recoverLogFile(5L, true, null);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testRecoverLogFileReuseLogAssertion3() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+        options.setReuseLogs(true);
+
+        options.getEnv().newWritableFile(FileName.logFileName(dbname, 5));
+
+        DBImpl db = new DBImpl(options, dbname);
+        db.getMutex().lock();
+
+        db.setMemtable(new IMemtable() {
+            @Override
+            public Iterator<InternalKey, String> iterator() {
+                return null;
+            }
+
+            @Override
+            public void add(long sequence, ValueType type, String key, String value) {
+
+            }
+
+            @Override
+            public Pair<Boolean, Pair<Status, String>> get(String userKey, long sequence) {
+                return null;
+            }
+
+            @Override
+            public int approximateMemoryUsage() {
+                return 0;
+            }
+        });
+        DBImpl.RecoverLogFileResult result = db.recoverLogFile(5L, true, null);
+    }
+
+    @Test
+    public void testRecoverLogFile() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+
+        options.getEnv().newWritableFile(FileName.logFileName(dbname, 5));
+
+        WriteBatch batch = new WriteBatch();
+        batch.put("foo", "bar");
+        batch.setSequence(100);
+
+        DBImpl db = new DBImpl(options, dbname);
+        db.getMutex().lock();
+
+        DBImpl spyDB = spy(db);
+        doReturn(new Pair<>(true, String.valueOf(batch.encode()))).doCallRealMethod().when(spyDB).readLogRecord(any());
+
+        VersionEdit edit = new VersionEdit();
+        DBImpl.RecoverLogFileResult result = spyDB.recoverLogFile(5L, true, edit);
+        assertTrue(result.getStatus().isOk());
+        assertTrue(result.isSaveManifest());
+        assertEquals(100, result.getMaxSequence().longValue());
+        assertNull(spyDB.getMemtable());
+        assertNull(spyDB.getLog());
+        assertNull(spyDB.getLogFile());
+        assertEquals(1, edit.getNewFiles().size());
+
+        spyDB.getOptions().setReuseLogs(true);
+        // do compactions and reuse log
+        doReturn(new Pair<>(true, String.valueOf(batch.encode()))).doCallRealMethod().when(spyDB).readLogRecord(any());
+        doReturn(0).when(spyDB).getWriteBufferSize();
+        edit = new VersionEdit();
+        result = spyDB.recoverLogFile(5L, true, edit);
+        assertTrue(result.getStatus().isOk());
+        assertTrue(result.isSaveManifest());
+        assertEquals(100, result.getMaxSequence().longValue());
+        assertNull(spyDB.getMemtable());
+        assertNull(spyDB.getLog());
+        assertNull(spyDB.getLogFile());
+        assertEquals(1, edit.getNewFiles().size());
+
+        // not last log and reuse log
+        doReturn(new Pair<>(true, String.valueOf(batch.encode()))).doCallRealMethod().when(spyDB).readLogRecord(any());
+        edit = new VersionEdit();
+        result = spyDB.recoverLogFile(5L, false, edit);
+        assertTrue(result.getStatus().isOk());
+        assertTrue(result.isSaveManifest());
+        assertEquals(100, result.getMaxSequence().longValue());
+        assertNull(spyDB.getMemtable());
+        assertNull(spyDB.getLog());
+        assertNull(spyDB.getLogFile());
+        assertEquals(1, edit.getNewFiles().size());
+
+        // reuse log get file size error
+        doReturn(new Pair<>(true, String.valueOf(batch.encode()))).doCallRealMethod().when(spyDB).readLogRecord(any());
+        doReturn(new Pair<>(Status.Corruption(""), null)).when(spyDB).getFileSize(anyString());
+        edit = new VersionEdit();
+        result = spyDB.recoverLogFile(5L, true, edit);
+        assertTrue(result.getStatus().isOk());
+        assertTrue(result.isSaveManifest());
+        assertEquals(100, result.getMaxSequence().longValue());
+        assertNull(spyDB.getMemtable());
+        assertNull(spyDB.getLog());
+        assertNull(spyDB.getLogFile());
+        assertEquals(1, edit.getNewFiles().size());
+        doCallRealMethod().when(spyDB).getFileSize(anyString());
+
+        // reuse log get appendable file error
+        doReturn(new Pair<>(true, String.valueOf(batch.encode()))).doCallRealMethod().when(spyDB).readLogRecord(any());
+        doReturn(new Pair<>(Status.Corruption(""), null)).when(spyDB).getAppendableFile(anyString());
+        edit = new VersionEdit();
+        result = spyDB.recoverLogFile(5L, true, edit);
+        assertTrue(result.getStatus().isOk());
+        assertTrue(result.isSaveManifest());
+        assertEquals(100, result.getMaxSequence().longValue());
+        assertNull(spyDB.getMemtable());
+        assertNull(spyDB.getLog());
+        assertNull(spyDB.getLogFile());
+        assertEquals(1, edit.getNewFiles().size());
+        doCallRealMethod().when(spyDB).getAppendableFile(anyString());
+
+        // reuse log
+        doReturn(new Pair<>(true, String.valueOf(batch.encode()))).doCallRealMethod().when(spyDB).readLogRecord(any());
+        doCallRealMethod().when(spyDB).getWriteBufferSize();
+        edit = new VersionEdit();
+        result = spyDB.recoverLogFile(5L, true, edit);
+        assertTrue(result.getStatus().isOk());
+        assertFalse(result.isSaveManifest());
+        assertEquals(100, result.getMaxSequence().longValue());
+        assertNotNull(spyDB.getMemtable());
+        assertNotNull(spyDB.getLog());
+        assertNotNull(spyDB.getLogFile());
+        assertEquals(0, edit.getNewFiles().size());
     }
 }

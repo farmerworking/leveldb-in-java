@@ -9,7 +9,7 @@ import java.util.Arrays;
 
 public class WriteBatch {
     private static ICoding coding = ICoding.getInstance();
-    private int kHeaderSize = coding.getFixed32Length() + coding.getFixed64Length();
+    public static int kHeaderSize = coding.getFixed32Length() + coding.getFixed64Length();
 
     private char[] buffer;
     private StringBuilder builder;
@@ -38,14 +38,14 @@ public class WriteBatch {
     public void put(String key, String value) {
         setCount(getCount() + 1);
         this.builder.append((char) ValueType.kTypeValue.getValue());
-        this.coding.putLengthPrefixedString(this.builder, key);
-        this.coding.putLengthPrefixedString(this.builder, value);
+        coding.putLengthPrefixedString(this.builder, key);
+        coding.putLengthPrefixedString(this.builder, value);
     }
 
     public void delete(String key) {
         setCount(getCount() + 1);
         this.builder.append((char) ValueType.kTypeDeletion.getValue());
-        this.coding.putLengthPrefixedString(this.builder, key);
+        coding.putLengthPrefixedString(this.builder, key);
     }
 
     public void append(WriteBatch writeBatch) {

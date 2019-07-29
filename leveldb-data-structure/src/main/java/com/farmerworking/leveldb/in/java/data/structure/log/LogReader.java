@@ -6,7 +6,9 @@ import com.farmerworking.leveldb.in.java.common.ICRC32C;
 import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
 import javafx.util.Pair;
+import lombok.Data;
 
+@Data
 public class LogReader implements ILogReader {
     private SequentialFile file;
     private ILogReporter reporter;
