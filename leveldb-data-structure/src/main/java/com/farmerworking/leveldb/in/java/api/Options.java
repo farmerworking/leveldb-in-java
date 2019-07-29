@@ -140,5 +140,8 @@ public class Options {
         this.infoLog = options.infoLog;
         this.writeBufferSize = options.writeBufferSize;
         this.maxOpenFiles = options.maxOpenFiles;
+        this.reuseLogs = options.reuseLogs;
+        this.paranoidChecks = options.paranoidChecks;
+        this.blockCache = options.blockCache;
     }
 }

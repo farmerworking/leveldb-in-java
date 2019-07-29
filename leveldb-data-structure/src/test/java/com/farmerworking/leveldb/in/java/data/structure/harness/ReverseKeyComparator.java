@@ -3,7 +3,7 @@ package com.farmerworking.leveldb.in.java.data.structure.harness;
 import com.farmerworking.leveldb.in.java.api.BytewiseComparator;
 import com.farmerworking.leveldb.in.java.api.Comparator;
 
-class ReverseKeyComparator implements Comparator {
+public class ReverseKeyComparator implements Comparator {
     private Comparator comparator;
 
     public ReverseKeyComparator() {
