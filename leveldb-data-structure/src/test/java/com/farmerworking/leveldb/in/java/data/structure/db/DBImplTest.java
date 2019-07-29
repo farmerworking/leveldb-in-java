@@ -346,4 +346,20 @@ public class DBImplTest {
         assertTrue(edit.getNewFiles().isEmpty());
         assertEquals(before, db.getStats()[0].getBytesWritten());
     }
+    @Test
+    public void testMaybeIgnoreError() {
+        Options options = new Options();
+        String dbname = options.getEnv().getTestDirectory().getValue();
+
+        DBImpl db = new DBImpl(options, dbname);
+        Status status = db.maybeIgnoreError(Status.OK());
+        assertTrue(status.isOk());
+
+        status = db.maybeIgnoreError(Status.Corruption(""));
+        assertTrue(status.isOk());
+
+        db.getOptions().setParanoidChecks(true);
+        status = db.maybeIgnoreError(Status.Corruption(""));
+        assertTrue(status.IsCorruption());
+    }
 }

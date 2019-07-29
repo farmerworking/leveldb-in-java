@@ -229,6 +229,16 @@ public class DBImpl {
         this.stats[level].add(stats);
         return status;
     }
+
+    Status maybeIgnoreError(Status status) {
+        if (status.isOk() || this.options.isParanoidChecks()) {
+            return status; // no need to change
+        } else {
+            Options.Logger.log(this.options.getInfoLog(), String.format("Ignoring error %s", status.toString()));
+            return Status.OK();
+        }
+    }
+
     void lock() {
         this.mutex.lock();
     }
