@@ -1,90 +1,134 @@
 package com.farmerworking.leveldb.in.java.data.structure.writebatch;
 
-import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.api.Status;
+import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.data.structure.memory.ValueType;
-import com.farmerworking.leveldb.in.java.data.structure.skiplist.Sizable;
+import javafx.util.Pair;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Arrays;
 
 public class WriteBatch {
-    private long sequence;
-    private List<WriteBatchItem> commands = new ArrayList<>();
+    private static ICoding coding = ICoding.getInstance();
+    private int kHeaderSize = coding.getFixed32Length() + coding.getFixed64Length();
 
-    class WriteBatchItem implements Sizable {
-        public ValueType valueType;
-        public String key;
-        public String value;
-
-        public WriteBatchItem(ValueType valueType, String key, String value) {
-            this.valueType = valueType;
-            this.key = key;
-            this.value = value;
-        }
-
-        @Override
-        public int memoryUsage() {
-            if (valueType == ValueType.kTypeDeletion) {
-                return 1 + ICoding.getInstance().varintLength(key.length()) + key.length();
-            } else {
-                return 1 +
-                        ICoding.getInstance().varintLength(key.length()) + key.length() +
-                        ICoding.getInstance().varintLength(value.length()) + value.length();
-            }
-        }
-    }
+    private char[] buffer;
+    private StringBuilder builder;
 
     public WriteBatch() {
-        clear();
-    }
-
-    public void clear() {
-        sequence = 0;
-        commands.clear();
-    }
-
-    public void put(String key, String value) {
-        this.commands.add(new WriteBatchItem(ValueType.kTypeValue, key, value));
-    }
-
-    public void delete(String key) {
-        this.commands.add(new WriteBatchItem(ValueType.kTypeDeletion, key, null));
-    }
-
-    public int approximateSize() {
-        int result = 0;
-        for(WriteBatchItem item : commands) {
-            result += item.memoryUsage();
-        }
-        return result;
-    }
-
-    public Status iterate(WriteBatchIterateHandler handler) {
-        for(WriteBatchItem item : commands) {
-            if (item.valueType == ValueType.kTypeValue) {
-                handler.put(item.key, item.value);
-            } else {
-                handler.delete(item.key);
-            }
-        }
-
-        return Status.OK();
-    }
-
-    public int getCount() {
-        return commands.size();
+        this.buffer = new char[kHeaderSize];
+        this.builder = new StringBuilder();
     }
 
     public long getSequence() {
-        return sequence;
+        return coding.decodeFixed64(buffer, 0);
     }
 
     public void setSequence(long sequence) {
-        this.sequence = sequence;
+        coding.encodeFixed64(buffer, 0, sequence);
+    }
+
+    public int getCount() {
+        return coding.decodeFixed32(buffer, coding.getFixed64Length());
+    }
+
+    public void setCount(int count) {
+        coding.encodeFixed32(buffer, coding.getFixed64Length(), count);
+    }
+
+    public void put(String key, String value) {
+        setCount(getCount() + 1);
+        this.builder.append((char) ValueType.kTypeValue.getValue());
+        this.coding.putLengthPrefixedString(this.builder, key);
+        this.coding.putLengthPrefixedString(this.builder, value);
+    }
+
+    public void delete(String key) {
+        setCount(getCount() + 1);
+        this.builder.append((char) ValueType.kTypeDeletion.getValue());
+        this.coding.putLengthPrefixedString(this.builder, key);
     }
 
     public void append(WriteBatch writeBatch) {
-        this.commands.addAll(writeBatch.commands);
+        setCount(getCount() + writeBatch.getCount());
+        this.builder.append(writeBatch.getBuilder());
+    }
+
+    public StringBuilder getBuilder() {
+        return builder;
+    }
+
+    public void clear() {
+        this.builder = new StringBuilder();
+        this.buffer = new char[this.buffer.length];
+    }
+
+    public int approximateSize() {
+        return this.buffer.length + this.builder.length();
+    }
+
+    public Status iterate(MemTableInserter memTableInserter) {
+        char[] chars = encode();
+        if (chars.length < kHeaderSize) {
+            return Status.Corruption("malformed WriteBatch (too small)");
+        }
+
+        int found = 0;
+        int index = kHeaderSize;
+        while (index < chars.length) {
+            found ++;
+            ValueType valueType = ValueType.valueOf((int) chars[index]);
+            index += 1;
+
+            if (valueType == null) {
+                return Status.Corruption("unknown WriteBatch tag");
+            } else if (valueType.equals(ValueType.kTypeValue)) {
+                Pair<String, Integer> pair = getLengthPrefixedString(chars, index);
+                if (pair == null) {
+                    return Status.Corruption("bad WriteBatch Put");
+                } else {
+                    index = pair.getValue();
+                    String key = pair.getKey();
+                    pair = getLengthPrefixedString(chars, index);
+                    if (pair == null) {
+                        return Status.Corruption("bad WriteBatch Put");
+                    } else {
+                        String value = pair.getKey();
+                        index = pair.getValue();
+                        memTableInserter.put(key, value);
+                    }
+                }
+            } else {
+                Pair<String, Integer> pair = getLengthPrefixedString(chars, index);
+                if (pair == null) {
+                    return Status.Corruption("bad WriteBatch Delete");
+                } else {
+                    index = pair.getValue();
+                    memTableInserter.delete(pair.getKey());
+                }
+            }
+        }
+
+        if (found != this.getCount()) {
+            return Status.Corruption("WriteBatch has wrong count");
+        } else {
+            return Status.OK();
+        }
+    }
+
+    Pair<String, Integer> getLengthPrefixedString(char[] chars, int index) {
+        return coding.getLengthPrefixedString(chars, index);
+    }
+
+    public void decode(char[] content) {
+        assert content.length >= coding.getFixed64Length() + coding.getFixed32Length();
+        this.buffer = Arrays.copyOfRange(content, 0, kHeaderSize);
+        this.builder = new StringBuilder(String.valueOf(Arrays.copyOfRange(content, kHeaderSize, content.length)));
+    }
+
+    public char[] encode() {
+        char[] chars = new char[this.buffer.length + this.builder.length()];
+        StringBuilder tmp = new StringBuilder().append(this.buffer).append(this.builder);
+        tmp.getChars(0, tmp.length(), chars, 0);
+        return chars;
     }
 }
