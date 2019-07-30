@@ -11,8 +11,6 @@ import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
 import com.farmerworking.leveldb.in.java.data.structure.version.*;
 import com.farmerworking.leveldb.in.java.data.structure.memory.Memtable;
-import com.farmerworking.leveldb.in.java.data.structure.writebatch.MemTableInserter;
-import com.farmerworking.leveldb.in.java.data.structure.writebatch.WriteBatch;
 import com.farmerworking.leveldb.in.java.file.Env;
 import com.farmerworking.leveldb.in.java.file.FileName;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
@@ -37,7 +35,7 @@ public class DBImpl {
 
     private static int kNumNonTableCacheFiles = 10;
 
-    private final Env env;
+    private Env env;
     private final InternalKeyComparator internalKeyComparator;
     private final InternalFilterPolicy internalFilterPolicy;
     private final Options options;
@@ -189,23 +187,6 @@ public class DBImpl {
         }
     }
 
-    @Data
-    class RecoverLogFileResult {
-        private Status status;
-        private boolean saveManifest;
-        private Long maxSequence;
-
-        public RecoverLogFileResult(Status status) {
-            this.status = status;
-        }
-
-        public RecoverLogFileResult(Status status, boolean saveManifest, Long maxSequence) {
-            this.status = status;
-            this.saveManifest = saveManifest;
-            this.maxSequence = maxSequence;
-        }
-    }
-
     RecoverLogFileResult recoverLogFile(long logFileNumber, boolean lastLog, VersionEdit edit) {
         assert this.mutex.isHeldByCurrentThread();
 
@@ -217,93 +198,59 @@ public class DBImpl {
             return new RecoverLogFileResult(status);
         }
 
-        LogReporter logReporter = new LogReporter(this.options.getInfoLog(), filename, this.options.isParanoidChecks() ? status : null);
-        // We intentionally make log::Reader do checksumming even if
-        // paranoid_checks==false so that corruptions cause entire commits
-        // to be skipped instead of propagating bad information (like overly
-        // large sequence numbers).
-        ILogReader logReader = new LogReader(pair.getValue(), logReporter, true, 0);
         Options.Logger.log(this.options.getInfoLog(), String.format("Recovering log %d", logFileNumber));
+        Log2MemtableReader log2MemtableReader = getLog2MemtableReader(edit, filename, pair.getValue()).invoke();
 
-        Long maxSequence = null;
-        boolean saveManifest = false;
-        int compactions = 0;
-        Memtable memtable = null;
-        WriteBatch batch = new WriteBatch();
+        status = log2MemtableReader.getStatus();
+        Long maxSequence = log2MemtableReader.getMaxSequence();
+        boolean saveManifest = log2MemtableReader.isSaveManifest();
+        int compactions = log2MemtableReader.getCompactions();
+        Memtable memtable = log2MemtableReader.getMemtable();
 
-        // Read all the records and add to a memtable
-        for(Pair<Boolean, String> read = readLogRecord(logReader);
-            read.getKey() && status.isOk();
-            read = readLogRecord(logReader)) {
-            if (read.getValue().length() < WriteBatch.kHeaderSize) {
-                logReporter.corruption(read.getValue().length(), Status.Corruption("log record too small"));
-                continue;
-            }
-
-            batch.decode(read.getValue().toCharArray());
-            if (memtable == null) {
-                memtable = new Memtable(this.internalKeyComparator);
-            }
-
-            MemTableInserter memTableInserter = new MemTableInserter(batch.getSequence(), memtable);
-            status = iterateBatch(batch, memTableInserter);
-            status = maybeIgnoreError(status);
-            if (status.isNotOk()) {
-                break;
-            }
-
-            long lastSeq = batch.getSequence() + batch.getCount() - 1;
-            if (maxSequence == null || lastSeq > maxSequence) {
-                maxSequence = lastSeq;
-            }
-
-            if (memtable.approximateMemoryUsage() > getWriteBufferSize()) {
-                compactions ++;
-                saveManifest = true;
-                status = writeLevel0Table(memtable, edit, null);
-                memtable = null;
-                if (status.isNotOk()) {
-                    // Reflect errors immediately so that conditions like full
-                    // file-systems cause the DB::Open() to fail.
-                    break;
-                }
-            }
+        if (shouldReuseLog(status, lastLog, compactions)) {
+            memtable = reuseLog(logFileNumber, filename, memtable);
         }
 
-        if (status.isOk() && this.options.isReuseLogs() && lastLog && compactions == 0) {
-            assert this.logFile == null;
-            assert this.log == null;
-            assert this.memtable == null;
-
-            Pair<Status, Long> fileSize = getFileSize(filename);
-            Pair<Status, WritableFile> append = getAppendableFile(filename);
-            if (fileSize.getKey().isOk() && append.getKey().isOk()) {
-                this.logFile = append.getValue();
-                Long logFileSize = fileSize.getValue();
-
-                Options.Logger.log(this.options.getInfoLog(), String.format("Reusing old log %s", filename));
-                this.log = new LogWriter(this.logFile, logFileSize);
-                this.logFileNumber = logFileNumber;
-
-                if (memtable != null) {
-                    this.memtable = memtable;
-                    memtable = null;
-                } else {
-                    // mem can be NULL if lognum exists but was empty.
-                    this.memtable = new Memtable(this.internalKeyComparator);
-                }
-            }
-        }
-
-        if (memtable != null) {
-            // mem did not get reused; compact it.
-            if (status.isOk()) {
-                saveManifest = true;
-                status = writeLevel0Table(memtable, edit, null);
-            }
+        // mem did not get reused; compact it.
+        if (status.isOk() && memtable != null) {
+            saveManifest = true;
+            status = writeLevel0Table(memtable, edit, null);
         }
 
         return new RecoverLogFileResult(status, saveManifest, maxSequence);
+    }
+
+    Memtable reuseLog(long logFileNumber, String filename, Memtable memtable) {
+        assert this.mutex.isHeldByCurrentThread();
+
+        assert this.logFile == null;
+        assert this.log == null;
+        assert this.memtable == null;
+
+        Pair<Status, Long> fileSize = getFileSize(filename);
+        Pair<Status, WritableFile> append = getAppendableFile(filename);
+        if (fileSize.getKey().isOk() && append.getKey().isOk()) {
+            this.logFile = append.getValue();
+            Long logFileSize = fileSize.getValue();
+
+            Options.Logger.log(this.options.getInfoLog(), String.format("Reusing old log %s", filename));
+            this.log = new LogWriter(this.logFile, logFileSize);
+            this.logFileNumber = logFileNumber;
+
+            if (memtable != null) {
+                this.memtable = memtable;
+                memtable = null;
+            } else {
+                // mem can be NULL if lognum exists but was empty.
+                this.memtable = new Memtable(this.internalKeyComparator);
+            }
+        }
+        return memtable;
+    }
+
+    boolean shouldReuseLog(Status status, boolean lastLog, int compactions) {
+        assert this.mutex.isHeldByCurrentThread();
+        return status.isOk() && this.options.isReuseLogs() && lastLog && compactions == 0;
     }
 
     Pair<Status, WritableFile> getAppendableFile(String filename) {
@@ -314,13 +261,6 @@ public class DBImpl {
         return this.env.getFileSize(filename);
     }
 
-    int getWriteBufferSize() {
-        return this.options.getWriteBufferSize();
-    }
-
-    Status iterateBatch(WriteBatch batch, MemTableInserter memTableInserter) {
-        return batch.iterate(memTableInserter);
-    }
 
     Status writeLevel0Table(IMemtable memtable, VersionEdit edit, Version base) {
         assert this.mutex.isHeldByCurrentThread();
@@ -379,7 +319,7 @@ public class DBImpl {
         this.mutex.unlock();
     }
 
-    Pair<Boolean, String> readLogRecord(ILogReader logReader) {
-        return logReader.readRecord();
+    Log2MemtableReader getLog2MemtableReader(VersionEdit edit, String filename, SequentialFile file) {
+        return new Log2MemtableReader(this, edit, filename, file);
     }
 }
