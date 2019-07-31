@@ -179,6 +179,19 @@ public class DefaultEnv implements Env {
         }
     }
 
+    @Override
+    public Status unlockFile(String lockFileName, FileLock fileLock) {
+        try {
+            if (removeLock(lockFileName)) {
+                fileLock.release();
+            }
+
+            return Status.OK();
+        } catch (IOException e) {
+            return Status.IOError(lockFileName, e.getMessage());
+        }
+    }
+
     private synchronized boolean addLock(String lockFileName) {
         return locks.add(lockFileName);
     }

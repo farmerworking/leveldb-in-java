@@ -36,6 +36,8 @@ public interface Env {
 
     Pair<Status, FileLock> lockFile(String lockFileName);
 
+    Status unlockFile(String lockFileName, FileLock fileLock);
+
     static Pair<Status, String> readFileToString(Env env, String fname) {
         Pair<Status, SequentialFile> pair = env.newSequentialFile(fname);
         Status status = pair.getKey();

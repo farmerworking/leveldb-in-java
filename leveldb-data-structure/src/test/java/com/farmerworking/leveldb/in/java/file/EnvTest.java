@@ -335,7 +335,7 @@ public abstract class EnvTest {
     }
 
     @Test
-    public void testLockFile() {
+    public void testLockUnLockFile() {
         Env env = getImpl();
         String dbname = env.getTestDirectory().getValue();
         String lockFileName = FileName.lockFileName(dbname);
@@ -345,8 +345,17 @@ public abstract class EnvTest {
         assertTrue(pair.getKey().isOk());
 
         // lock second time by same jvm
-        pair = env.lockFile(lockFileName);
-        assertTrue(pair.getKey().IsIOError());
-        assertEquals(String.format("lock %s already held by process", lockFileName), pair.getKey().getMessage());
+        Pair<Status, FileLock> pair2 = env.lockFile(lockFileName);
+        assertTrue(pair2.getKey().IsIOError());
+        assertEquals(String.format("lock %s already held by process", lockFileName), pair2.getKey().getMessage());
+
+        // unlock and lock
+        int index = 10;
+        while (index -- > 0) {
+            Status status = env.unlockFile(lockFileName, pair.getValue());
+            assertTrue(status.isOk());
+            pair = env.lockFile(lockFileName);
+            assertTrue(pair.getKey().isOk());
+        }
     }
 }

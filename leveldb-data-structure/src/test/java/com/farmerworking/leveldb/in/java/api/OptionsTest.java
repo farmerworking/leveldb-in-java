@@ -17,6 +17,7 @@ import java.util.Collection;
 import java.util.List;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.mock;
 
 public class OptionsTest {
     @Test
@@ -31,72 +32,7 @@ public class OptionsTest {
         src.setCompression(CompressionType.kNoCompression);
         src.setParanoidChecks(true);
         src.setBlockCache(new ShardedLRUCache(1024));
-        src.setEnv(new Env() {
-            @Override
-            public Pair<Status, WritableFile> newWritableFile(String filename) {
-                return null;
-            }
-
-            @Override
-            public Pair<Status, WritableFile> newAppendableFile(String filename) {
-                return null;
-            }
-
-            @Override
-            public Pair<Status, RandomAccessFile> newRandomAccessFile(String filename) {
-                return null;
-            }
-
-            @Override
-            public Pair<Status, SequentialFile> newSequentialFile(String filename) {
-                return null;
-            }
-
-            @Override
-            public Pair<Status, String> getTestDirectory() {
-                return null;
-            }
-
-            @Override
-            public Pair<Status, Boolean> delete(String filename) {
-                return null;
-            }
-
-            @Override
-            public boolean isFileExists(String filename){
-                return false;
-            }
-
-            @Override
-            public Pair<Status, Long> getFileSize(String filename) {
-                return null;
-            }
-
-            @Override
-            public Status renameFile(String from, String to) {
-                return null;
-            }
-
-            @Override
-            public Status createDir(String name) {
-                return null;
-            }
-
-            @Override
-            public Pair<Status, Options.Logger> newLogger(String logFileName) {
-                return null;
-            }
-
-            @Override
-            public Pair<Status, List<String>> getChildren(String dbname) {
-                return null;
-            }
-
-            @Override
-            public Pair<Status, FileLock> lockFile(String lockFileName) {
-                return null;
-            }
-        });
+        src.setEnv(mock(Env.class));
         src.setMaxFileSize(10);
         src.setInfoLog(new LogImpl("/tmp/abc"));
         src.setReuseLogs(true);
