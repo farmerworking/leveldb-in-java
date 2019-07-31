@@ -7,6 +7,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.nio.channels.FileLock;
 import java.util.Collection;
+import java.util.List;
 
 public interface Env {
     Pair<Status, WritableFile> newWritableFile(String filename) ;
@@ -21,7 +22,7 @@ public interface Env {
 
     Pair<Status, Boolean> delete(String filename);
 
-    Pair<Status, Boolean> isFileExists(String filename);
+    boolean isFileExists(String filename);
 
     Pair<Status, Long> getFileSize(String filename);
 
@@ -31,7 +32,7 @@ public interface Env {
 
     Pair<Status, Options.Logger> newLogger(String logFileName);
 
-    Pair<Status, Collection<String>> getChildren(String dbname);
+    Pair<Status, List<String>> getChildren(String dbname);
 
     Pair<Status, FileLock> lockFile(String lockFileName);
 

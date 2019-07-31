@@ -93,12 +93,8 @@ public class DefaultEnv implements Env {
     }
 
     @Override
-    public Pair<Status, Boolean> isFileExists(String filename) {
-        try {
-            return new Pair<>(Status.OK(), Files.exists(Paths.get(filename)));
-        } catch (Exception e) {
-            return new Pair<>(Status.IOError(e.getMessage()), null);
-        }
+    public boolean isFileExists(String filename) {
+        return Files.exists(Paths.get(filename));
     }
 
     @Override
@@ -140,7 +136,7 @@ public class DefaultEnv implements Env {
     }
 
     @Override
-    public Pair<Status, Collection<String>> getChildren(String dbname) {
+    public Pair<Status, List<String>> getChildren(String dbname) {
         File directory = new File(dbname);
 
         if (!directory.exists()) {

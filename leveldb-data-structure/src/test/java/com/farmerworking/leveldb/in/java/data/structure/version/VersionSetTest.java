@@ -1162,8 +1162,7 @@ public class VersionSetTest {
     private void verifyLogAndApplyCleanupWhenStatusNotOk(Options options, String dbname, VersionSet versionSet) {
         assertNull(versionSet.getDescriptorFile());
         assertNull(versionSet.getDescriptorLog());
-        assertTrue(options.getEnv().isFileExists(FileName.descriptorFileName(dbname, 10)).getKey().isOk());
-        assertFalse(options.getEnv().isFileExists(FileName.descriptorFileName(dbname, 10)).getValue());
+        assertFalse(options.getEnv().isFileExists(FileName.descriptorFileName(dbname, 10)));
     }
 
     private int logCount(ILogReader logReader) {

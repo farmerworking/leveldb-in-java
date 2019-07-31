@@ -3,17 +3,13 @@ package com.farmerworking.leveldb.in.java.file;
 import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.common.TestUtils;
-import com.farmerworking.leveldb.in.java.file.impl.DefaultEnv;
 import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
-import java.io.File;
 import java.nio.channels.FileLock;
-import java.util.Collection;
+import java.util.List;
 import java.util.Random;
 
 import static org.junit.Assert.*;
@@ -87,9 +83,8 @@ public abstract class EnvTest {
         String testDir = pair.getValue();
 
         String nonExistentFile = testDir + "/non_existent_file";
-        Pair<Status, Boolean> existPair = env.isFileExists(nonExistentFile);
-        assertTrue(existPair.getKey().isOk());
-        assertFalse(existPair.getValue());
+        Boolean exist = env.isFileExists(nonExistentFile);
+        assertFalse(exist);
 
         Pair<Status, RandomAccessFile> filePair = env.newRandomAccessFile(nonExistentFile);
         assertTrue(filePair.getKey().IsNotFound());
@@ -173,13 +168,12 @@ public abstract class EnvTest {
         Pair<Status, Long> tmp2 = getImpl().getFileSize(filename);
         assertTrue(tmp2.getKey().IsIOError());
 
-        tmp = getImpl().isFileExists(filename);
-        assertTrue(tmp.getKey().isOk());
-        assertFalse(tmp.getValue());
+        boolean exists = getImpl().isFileExists(filename);
+        assertFalse(exists);
 
         Pair<Status, WritableFile> pair = getImpl().newWritableFile(filename);
         Pair<Status, Long> tmp1 = getImpl().getFileSize(filename);
-        assertTrue(tmp1.getKey().isOk());
+        assertTrue(tmp1.getKey().toString(), tmp1.getKey().isOk());
         assertEquals(0L, tmp1.getValue().longValue());
 
         pair.getValue().append("aaa");
@@ -204,23 +198,19 @@ public abstract class EnvTest {
 
         assertTrue(getImpl().newWritableFile(filename1).getKey().isOk());
 
-        Pair<Status, Boolean> pair = getImpl().isFileExists(filename1);
-        assertTrue(pair.getKey().isOk());
-        assertTrue(pair.getValue());
+        Boolean exists = getImpl().isFileExists(filename1);
+        assertTrue(exists);
 
-        pair = getImpl().isFileExists(filename2);
-        assertTrue(pair.getKey().isOk());
-        assertFalse(pair.getValue());
+        exists = getImpl().isFileExists(filename2);
+        assertFalse(exists);
 
         assertTrue(getImpl().renameFile(filename1, filename2).isOk());
 
-        pair = getImpl().isFileExists(filename1);
-        assertTrue(pair.getKey().isOk());
-        assertFalse(pair.getValue());
+        exists = getImpl().isFileExists(filename1);
+        assertFalse(exists);
 
-        pair = getImpl().isFileExists(filename2);
-        assertTrue(pair.getKey().isOk());
-        assertTrue(pair.getValue());
+        exists = getImpl().isFileExists(filename2);
+        assertTrue(exists);
     }
 
     @Test
@@ -269,7 +259,7 @@ public abstract class EnvTest {
         status = Env.writeStringToFileSync(spyEnv, s, filename);
         assertTrue(status.IsCorruption());
         assertEquals("force append error", status.getMessage());
-        assertFalse(spyEnv.isFileExists(filename).getValue());
+        assertFalse(spyEnv.isFileExists(filename));
 
         // sync
         when(writableFile.append(anyString())).thenReturn(Status.OK());
@@ -277,7 +267,7 @@ public abstract class EnvTest {
         status = Env.writeStringToFileSync(spyEnv, s, filename);
         assertTrue(status.IsCorruption());
         assertEquals("force sync error", status.getMessage());
-        assertFalse(spyEnv.isFileExists(filename).getValue());
+        assertFalse(spyEnv.isFileExists(filename));
 
         // close
         when(writableFile.sync()).thenReturn(Status.OK());
@@ -285,7 +275,7 @@ public abstract class EnvTest {
         status = Env.writeStringToFileSync(spyEnv, s, filename);
         assertTrue(status.IsCorruption());
         assertEquals("force close error", status.getMessage());
-        assertFalse(spyEnv.isFileExists(filename).getValue());
+        assertFalse(spyEnv.isFileExists(filename));
 
         // delete
         doReturn(new Pair<>(Status.Corruption("force delete error"), null)).when(spyEnv).delete(anyString());
@@ -302,16 +292,14 @@ public abstract class EnvTest {
         Pair<Status, Boolean> pair = env.delete(directory);
         assertTrue(pair.getKey().isOk());
 
-        Pair<Status, Boolean> pair2 = env.isFileExists(directory);
-        assertTrue(pair2.getKey().isOk());
-        assertFalse(pair2.getValue());
+        Boolean exists = env.isFileExists(directory);
+        assertFalse(exists);
 
         Status status = env.createDir(directory);
         assertTrue(status.isOk());
 
-        pair2 = env.isFileExists(directory);
-        assertTrue(pair2.getKey().isOk());
-        assertTrue(pair2.getValue());
+        exists = env.isFileExists(directory);
+        assertTrue(exists);
     }
 
     @Test
@@ -331,7 +319,7 @@ public abstract class EnvTest {
         Env env = getImpl();
         String dbname = env.getTestDirectory().getValue();
 
-        Pair<Status, Collection<String>> pair = env.getChildren(dbname + "notexist");
+        Pair<Status, List<String>> pair = env.getChildren(dbname + "notexist");
         assertTrue(pair.getKey().IsIOError());
 
         pair = env.getChildren(dbname);

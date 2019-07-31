@@ -14,6 +14,7 @@ import org.junit.Test;
 import java.lang.reflect.Field;
 import java.nio.channels.FileLock;
 import java.util.Collection;
+import java.util.List;
 
 import static org.junit.Assert.*;
 
@@ -62,8 +63,8 @@ public class OptionsTest {
             }
 
             @Override
-            public Pair<Status, Boolean> isFileExists(String filename) {
-                return null;
+            public boolean isFileExists(String filename){
+                return false;
             }
 
             @Override
@@ -87,7 +88,7 @@ public class OptionsTest {
             }
 
             @Override
-            public Pair<Status, Collection<String>> getChildren(String dbname) {
+            public Pair<Status, List<String>> getChildren(String dbname) {
                 return null;
             }
 

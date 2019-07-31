@@ -119,12 +119,12 @@ public class BuilderTest {
 
         String filename = FileName.tableFileName(dbname, metaData.getFileNumber());
         options.getEnv().delete(filename);
-        assertFalse(options.getEnv().isFileExists(filename).getValue());
+        assertFalse(options.getEnv().isFileExists(filename));
 
         Status status = builder.buildTable(dbname, options.getEnv(), options, tableCache, validIterator, metaData);
 
         assertTrue(status.isOk());
-        assertTrue(options.getEnv().isFileExists(filename).getValue());
+        assertTrue(options.getEnv().isFileExists(filename));
         assertTrue(metaData.getFileSize() > 0);
         assertEquals(new InternalKey("a", 1L), metaData.getSmallest());
         assertEquals(new InternalKey("b", 2L), metaData.getLargest());
@@ -139,42 +139,42 @@ public class BuilderTest {
         Status status = builder.buildTable(dbname, options.getEnv(), options, null, new EmptyIterator(Status.IOError("force iterator status error")), metaData);
         assertTrue(status.isNotOk());
         assertEquals("force iterator status error", status.getMessage());
-        assertFalse(options.getEnv().isFileExists(filename).getValue());
+        assertFalse(options.getEnv().isFileExists(filename));
 
         Env spyEnv = spy(options.getEnv());
         doReturn(new Pair<>(Status.Corruption("force writable file error"), null)).when(spyEnv).newWritableFile(anyString());
         status = builder.buildTable(dbname, spyEnv, options, null, validIterator, metaData);
         assertTrue(status.isNotOk());
         assertEquals("force writable file error", status.getMessage());
-        assertFalse(options.getEnv().isFileExists(filename).getValue());
+        assertFalse(options.getEnv().isFileExists(filename));
 
         Builder spyBuilder = spy(builder);
         doReturn(Status.Corruption("force finish error")).when(spyBuilder).finish(any());
         status = spyBuilder.buildTable(dbname, options.getEnv(), options, null, validIterator, metaData);
         assertTrue(status.isNotOk());
         assertEquals("force finish error", status.getMessage());
-        assertFalse(options.getEnv().isFileExists(filename).getValue());
+        assertFalse(options.getEnv().isFileExists(filename));
         doCallRealMethod().when(spyBuilder).finish(any());
 
         doReturn(Status.Corruption("force sync error")).when(spyBuilder).sync(any());
         status = spyBuilder.buildTable(dbname, options.getEnv(), options, null, validIterator, metaData);
         assertTrue(status.isNotOk());
         assertEquals("force sync error", status.getMessage());
-        assertFalse(options.getEnv().isFileExists(filename).getValue());
+        assertFalse(options.getEnv().isFileExists(filename));
         doCallRealMethod().when(spyBuilder).sync(any());
 
         doReturn(Status.Corruption("force close error")).when(spyBuilder).close(any());
         status = spyBuilder.buildTable(dbname, options.getEnv(), options, null, validIterator, metaData);
         assertTrue(status.isNotOk());
         assertEquals("force close error", status.getMessage());
-        assertFalse(options.getEnv().isFileExists(filename).getValue());
+        assertFalse(options.getEnv().isFileExists(filename));
         doCallRealMethod().when(spyBuilder).close(any());
 
         doReturn(Status.Corruption("force status error")).when(spyBuilder).status(any());
         status = spyBuilder.buildTable(dbname, options.getEnv(), options, tableCache, validIterator, metaData);
         assertTrue(status.isNotOk());
         assertEquals("force status error", status.getMessage());
-        assertFalse(options.getEnv().isFileExists(filename).getValue());
+        assertFalse(options.getEnv().isFileExists(filename));
         doCallRealMethod().when(spyBuilder).status(any());
     }
 }

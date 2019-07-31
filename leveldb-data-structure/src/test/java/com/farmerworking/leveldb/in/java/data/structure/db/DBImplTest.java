@@ -207,8 +207,8 @@ public class DBImplTest {
     void verifyNewDBError(Options options, String dbname, Status status, String s) {
         assertTrue(status.isNotOk());
         assertEquals(s, status.getMessage());
-        assertFalse(options.getEnv().isFileExists(FileName.descriptorFileName(dbname, DBImpl.NEW_DB_MANIFEST_NUMBER)).getValue());
-        assertFalse(options.getEnv().isFileExists(FileName.currentFileName(dbname)).getValue());
+        assertFalse(options.getEnv().isFileExists(FileName.descriptorFileName(dbname, DBImpl.NEW_DB_MANIFEST_NUMBER)));
+        assertFalse(options.getEnv().isFileExists(FileName.currentFileName(dbname)));
     }
 
     @Test
@@ -284,7 +284,7 @@ public class DBImplTest {
 
         // file
         String filename = FileName.tableFileName(dbname, metaData.getFileNumber());
-        assertTrue(options.getEnv().isFileExists(filename).getValue());
+        assertTrue(options.getEnv().isFileExists(filename));
 
         // file content
         Iterator<String, String> iter1 = db.getTableCache().iterator(
@@ -412,7 +412,7 @@ public class DBImplTest {
         RecoverLogFileResult result = spyDB.recoverLogFile(5L, true, edit);
         assertTrue(result.getStatus().isOk());
         assertTrue(result.isSaveManifest());
-        assertEquals(100, result.getMaxSequence().longValue());
+        assertEquals(100, result.getMaxSequence());
         assertNull(spyDB.getMemtable());
         assertNull(spyDB.getLog());
         assertNull(spyDB.getLogFile());
@@ -445,7 +445,7 @@ public class DBImplTest {
         RecoverLogFileResult result = spyDB.recoverLogFile(5L, true, edit);
         assertTrue(result.getStatus().isOk());
         assertFalse(result.isSaveManifest());
-        assertEquals(100, result.getMaxSequence().longValue());
+        assertEquals(100, result.getMaxSequence());
         assertNotNull(spyDB.getMemtable());
         assertNotNull(spyDB.getLog());
         assertNotNull(spyDB.getLogFile());

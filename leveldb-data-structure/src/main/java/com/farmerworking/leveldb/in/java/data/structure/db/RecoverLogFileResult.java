@@ -7,13 +7,13 @@ import lombok.Data;
 class RecoverLogFileResult {
     private Status status;
     private boolean saveManifest;
-    private Long maxSequence;
+    private long maxSequence;
 
     public RecoverLogFileResult(Status status) {
         this.status = status;
     }
 
-    public RecoverLogFileResult(Status status, boolean saveManifest, Long maxSequence) {
+    public RecoverLogFileResult(Status status, boolean saveManifest, long maxSequence) {
         this.status = status;
         this.saveManifest = saveManifest;
         this.maxSequence = maxSequence;
