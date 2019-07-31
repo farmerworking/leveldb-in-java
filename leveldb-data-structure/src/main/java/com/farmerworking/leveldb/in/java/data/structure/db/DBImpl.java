@@ -11,17 +11,13 @@ import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
 import com.farmerworking.leveldb.in.java.data.structure.version.*;
 import com.farmerworking.leveldb.in.java.data.structure.memory.Memtable;
-import com.farmerworking.leveldb.in.java.file.Env;
-import com.farmerworking.leveldb.in.java.file.FileName;
-import com.farmerworking.leveldb.in.java.file.SequentialFile;
-import com.farmerworking.leveldb.in.java.file.WritableFile;
+import com.farmerworking.leveldb.in.java.file.*;
 import javafx.util.Pair;
 import lombok.Data;
 
 import java.lang.reflect.Field;
 import java.nio.channels.FileLock;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -138,6 +134,145 @@ public class DBImpl {
 
     LogWriter newDBGetLogWriter(WritableFile file) {
         return new LogWriter(file);
+    }
+
+    public Pair<Status, Boolean> recover(VersionEdit edit) {
+        assert this.mutex.isHeldByCurrentThread();
+
+        // Ignore error from CreateDir since the creation of the DB is
+        // committed only when the descriptor is created, and this directory
+        // may already exist from a previous failed creation attempt.
+        env.createDir(this.dbname);
+        assert this.dbLock == null;
+        Pair<Status, FileLock> pair = lockFile();
+        Status status = pair.getKey();
+        if (status.isNotOk()) {
+            return new Pair<>(status, null);
+        }
+        this.dbLock = pair.getValue();
+
+        if (!this.env.isFileExists(FileName.currentFileName(this.dbname))) {
+            if (this.options.isCreateIfMissing()) {
+                status = newDB();
+                if (status.isNotOk()) {
+                    return new Pair<>(status, null);
+                }
+            } else {
+                return new Pair<>(Status.InvalidArgument(this.dbname, "does not exist (createIfMissing is false)"), null);
+            }
+        } else {
+            if (this.options.isErrorIfExists()) {
+                return new Pair<>(Status.InvalidArgument(this.dbname, "exists (errorIfExists is true)"), null);
+            }
+        }
+
+        Pair<Status, Boolean> recover = versionsRecover();
+        status = recover.getKey();
+        if (status.isNotOk()) {
+            return new Pair<>(status, null);
+        }
+
+        Boolean saveManifest = recover.getValue();
+
+        Pair<Status, List<String>> children = getChildren(this.dbname);
+        status = children.getKey();
+        if (status.isNotOk()) {
+            return new Pair<>(status, null);
+        }
+        List<String> filenames = children.getValue();
+
+        // Recover from all newer log files than the ones named in the
+        // descriptor (new log files may have been added by the previous
+        // incarnation without registering them in the descriptor).
+        //
+        // Note that PrevLogNumber() is no longer used, but we pay
+        // attention to it in case we are recovering a database
+        // produced by an older version of leveldb.
+        long minLog = versions.getLogNumber();
+        long prevLog = versions.getPrevLogNumber();
+
+        Set<Long> liveTableFileNumbers = getLiveFiles();
+        List<Long> logs = filterRecoverLog(minLog, prevLog, filenames, liveTableFileNumbers);
+
+        if (!liveTableFileNumbers.isEmpty()) {
+            return new Pair<>(Status.Corruption(String.format("%d missing file; e.g. %s", liveTableFileNumbers.size(), FileName.tableFileName(this.dbname, liveTableFileNumbers.iterator().next()))), null);
+        }
+
+        Pair<Status, Pair<Long, Boolean>> tmp = recoverLogFiles(logs, edit);
+        status = tmp.getKey();
+        if (status.isNotOk()) {
+            return new Pair<>(status, null);
+        }
+
+        long maxSequence = tmp.getValue().getKey();
+        saveManifest = saveManifest || tmp.getValue().getValue();
+
+        if (this.versions.getLastSequence() < maxSequence) {
+            this.versions.setLastSequence(maxSequence);
+        }
+
+        return new Pair<>(Status.OK(), saveManifest);
+    }
+
+    Pair<Status, Pair<Long, Boolean>> recoverLogFiles(List<Long> logs, VersionEdit edit) {
+        assert this.mutex.isHeldByCurrentThread();
+
+        long maxSequence = 0L;
+        boolean saveManifest = false;
+
+        for (int i = 0; i < logs.size(); i++) {
+            RecoverLogFileResult recoverLogFileResult = recoverLogFile(logs.get(i), i == logs.size() - 1, edit);
+            Status status = recoverLogFileResult.getStatus();
+            if (status.isNotOk()) {
+                return new Pair<>(status, null);
+            }
+            maxSequence = Math.max(maxSequence, recoverLogFileResult.getMaxSequence());
+            saveManifest = saveManifest || recoverLogFileResult.isSaveManifest();
+
+            // The previous incarnation may not have written any MANIFEST
+            // records after allocating this log number.  So we manually
+            // update the file number allocation counter in VersionSet.
+            this.versions.markFileNumberUsed(logs.get(i));
+        }
+
+        return new Pair<>(Status.OK(), new Pair<>(maxSequence, saveManifest));
+    }
+
+    List<Long> filterRecoverLog(long minLog, long prevLog, List<String> filenames, Set<Long> liveTableFileNumbers) {
+        assert this.mutex.isHeldByCurrentThread();
+
+        List<Long> logs = new ArrayList<>();
+
+        for (int i = 0; i < filenames.size(); i++) {
+            Pair<Long, FileType> parse = FileName.parseFileName(filenames.get(i));
+
+            if (parse != null) {
+                liveTableFileNumbers.remove(parse.getKey());
+                if (parse.getValue().equals(FileType.kLogFile) &&
+                        (parse.getKey() >= minLog || parse.getKey() == prevLog)) {
+                    logs.add(parse.getKey());
+                }
+            }
+        }
+
+        Collections.sort(logs);
+        return logs;
+    }
+
+    Set<Long> getLiveFiles() {
+        return this.versions.getLiveFiles();
+    }
+
+    Pair<Status, List<String>> getChildren(String directory) {
+        return this.env.getChildren(directory);
+    }
+
+    Pair<Status, Boolean> versionsRecover() {
+        return this.versions.recover();
+    }
+
+    Pair<Status, FileLock> lockFile() {
+        return this.env.lockFile(FileName.lockFileName(this.dbname));
     }
 
     static Options sanitizeOptions(String dbname, InternalKeyComparator icmp, InternalFilterPolicy ipolicy, Options src) {

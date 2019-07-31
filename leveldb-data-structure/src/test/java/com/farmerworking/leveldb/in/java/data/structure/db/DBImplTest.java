@@ -19,13 +19,23 @@ import com.farmerworking.leveldb.in.java.file.Env;
 import com.farmerworking.leveldb.in.java.file.FileName;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+
+import java.io.IOException;
+import java.nio.channels.FileLock;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.Vector;
 
 import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -35,12 +45,25 @@ public class DBImplTest {
     Options options;
     String dbname;
     DBImpl db;
+    DBImpl spyDB;
 
     @Before
     public void setUp() throws Exception {
         options = new Options();
         dbname = options.getEnv().getTestDirectory().getValue();
         db = new DBImpl(options, dbname);
+        spyDB = spy(db);
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        if (db != null && db.getDbLock() != null) {
+            options.getEnv().unlockFile(FileName.lockFileName(dbname), db.getDbLock());
+        }
+
+        if (spyDB != null && spyDB.getDbLock() != null) {
+            options.getEnv().unlockFile(FileName.lockFileName(dbname), spyDB.getDbLock());
+        }
     }
 
     @Test(expected = AssertionError.class)
@@ -182,12 +205,11 @@ public class DBImplTest {
         verifyNewDBError(options, dbname, status, "force new writable file error");
 
         doCallRealMethod().when(spyEnv).newWritableFile(anyString());
-        DBImpl spyDb = spy(db);
         ILogWriter mockLogWriter = mock(LogWriter.class);
         doReturn(Status.IOError("force add record error")).when(mockLogWriter).addRecord(anyString());
-        doReturn(mockLogWriter).when(spyDb).newDBGetLogWriter(any());
+        doReturn(mockLogWriter).when(spyDB).newDBGetLogWriter(any());
 
-        status = spyDb.newDB();
+        status = spyDB.newDB();
         verifyNewDBError(options, dbname, status, "force add record error");
 
         doAnswer(new Answer() {
@@ -374,7 +396,6 @@ public class DBImplTest {
         options.getEnv().newWritableFile(FileName.logFileName(dbname, 5));
         db.getMutex().lock();
 
-        DBImpl spyDB = spy(db);
         doReturn(Status.Corruption("force write level0 table error")).when(spyDB).writeLevel0Table(any(), any(), any());
 
         Log2MemtableReader mockReader = mock(Log2MemtableReader.class);
@@ -396,7 +417,6 @@ public class DBImplTest {
         batch.setSequence(100);
 
         db.getMutex().lock();
-        DBImpl spyDB = spy(db);
 
         doAnswer(new Answer() {
             @Override
@@ -428,7 +448,6 @@ public class DBImplTest {
         batch.setSequence(100);
 
         db.getMutex().lock();
-        DBImpl spyDB = spy(db);
 
         doAnswer(new Answer() {
             @Override
@@ -485,7 +504,6 @@ public class DBImplTest {
     @Test
     public void testReuseLogGetFileSizeError() {
         db.getMutex().lock();
-        DBImpl spyDB = spy(db);
         doReturn(new Pair<>(Status.Corruption(""), null)).when(spyDB).getFileSize(anyString());
 
         Memtable memtable = mock(Memtable.class);
@@ -500,7 +518,6 @@ public class DBImplTest {
     @Test
     public void testReuseLogGetAppendableFileError() {
         db.getMutex().lock();
-        DBImpl spyDB = spy(db);
         doReturn(new Pair<>(Status.Corruption(""), null)).when(spyDB).getAppendableFile(anyString());
 
         Memtable memtable = mock(Memtable.class);
@@ -555,4 +572,407 @@ public class DBImplTest {
         db.shouldReuseLog(null, true, 0);
     }
 
+    @Test(expected = AssertionError.class)
+    public void testRecoverWithoutLock() {
+        db.recover(null);
+    }
+
+    @Test
+    public void testRecoverCreateDbDirectoryIfNotExist() throws IOException {
+        TestUtils.deleteDirectory(dbname);
+        assertFalse(options.getEnv().isFileExists(dbname));
+
+        db.getMutex().lock();
+        db.recover(null);
+        assertTrue(options.getEnv().isFileExists(dbname));
+    }
+
+    @Test(expected = AssertionError.class)
+    // with dbLock means recover more than once
+    public void testRecoverWithDbLock() {
+        db.getMutex().lock();
+        db.setDbLock(mock(FileLock.class));
+        db.recover(null);
+    }
+
+    @Test
+    public void testRecoverRequireFileLockFail() {
+        db.getMutex().lock();
+
+        doReturn(new Pair<>(Status.IOError("force lock file error"), null)).when(spyDB).lockFile();
+        Pair<Status, Boolean> pair = spyDB.recover(null);
+        assertEquals("force lock file error", pair.getKey().getMessage());
+    }
+
+    @Test
+    public void testRecoverNotExistError() {
+        db.getMutex().lock();
+        db.getOptions().setCreateIfMissing(false);
+        String current = FileName.currentFileName(dbname);
+        options.getEnv().delete(current);
+        assertFalse(options.getEnv().isFileExists(current));
+
+        Pair<Status, Boolean> pair = db.recover(null);
+        assertEquals(dbname + ": does not exist (createIfMissing is false)", pair.getKey().getMessage());
+    }
+
+    @Test
+    public void testRecoverExistError() {
+        db.getMutex().lock();
+        db.getOptions().setErrorIfExists(true);
+        String current = FileName.currentFileName(dbname);
+        options.getEnv().newWritableFile(current);
+        assertTrue(options.getEnv().isFileExists(current));
+
+        Pair<Status, Boolean> pair = db.recover(null);
+        assertEquals(dbname + ": exists (errorIfExists is true)", pair.getKey().getMessage());
+
+    }
+
+    @Test
+    public void testRecoverNewDBError() {
+        db.getMutex().lock();
+        db.getOptions().setCreateIfMissing(true);
+        String current = FileName.currentFileName(dbname);
+        options.getEnv().delete(current);
+        assertFalse(options.getEnv().isFileExists(current));
+
+        doReturn(Status.IOError("force new db error") ).when(spyDB).newDB();
+        Pair<Status, Boolean> pair = spyDB.recover(null);
+
+        assertEquals("force new db error", pair.getKey().getMessage());
+    }
+
+    @Test
+    public void testRecoverVersionsRecoverError() {
+        db.getMutex().lock();
+        db.getOptions().setCreateIfMissing(true);
+
+        doReturn(new Pair<>(Status.Corruption("force versions recovery error"), null)).when(spyDB).versionsRecover();
+
+        Pair<Status, Boolean> pair = spyDB.recover(null);
+        assertEquals("force versions recovery error", pair.getKey().getMessage());
+    }
+
+    @Test
+    public void testRecoverGetChildrenError() {
+        db.getMutex().lock();
+        db.getOptions().setCreateIfMissing(true);
+
+        doReturn(new Pair<>(Status.IOError("force get children error"), null)).when(spyDB).getChildren(anyString());
+
+        Pair<Status, Boolean> pair = spyDB.recover(null);
+        assertEquals("force get children error", pair.getKey().getMessage());
+    }
+
+    @Test
+    public void testRecoverLiveFileMissing() {
+        db.getMutex().lock();
+        db.getOptions().setCreateIfMissing(true);
+
+        doReturn(new Pair<>(Status.OK(), new ArrayList<>())).when(spyDB).getChildren(anyString());
+        doReturn(Sets.newHashSet(1L)).when(spyDB).getLiveFiles();
+        doReturn(new Pair<>(Status.OK(), false)).when(spyDB).versionsRecover();
+
+        Pair<Status, Boolean> pair = spyDB.recover(null);
+        assertTrue(pair.getKey().IsCorruption());
+        assertEquals("1 missing file; e.g. " + dbname + "/1.ldb", pair.getKey().getMessage());
+    }
+
+    @Test
+    public void testFilterRecoverLog() {
+        List<String> filenames = Lists.newArrayList(
+                "whatever", "1.ldb", "2.sst", "7.log", "6.log", "5.log", "4.log", "9.sst", "10.ldb"
+        );
+
+        Set<Long> liveTableFileNumbers = Sets.newHashSet(
+                1L, 2L, 3L
+        );
+
+        db.getMutex().lock();
+        List<Long> result = db.filterRecoverLog(6, 4, filenames, liveTableFileNumbers);
+
+        assertEquals(1, liveTableFileNumbers.size());
+        assertEquals(3L, liveTableFileNumbers.iterator().next().longValue());
+        List<Long> expect = Lists.newArrayList(4L, 6L, 7L);
+        assertArrayEquals(expect.toArray(), result.toArray());
+
+        java.util.Iterator<Long> iter = result.iterator();
+        Long last = null;
+        while(iter.hasNext()) {
+            Long item = iter.next();
+            if (last != null) {
+                assertTrue(item > last);
+            }
+            last = item;
+        }
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testFilterRecoverLogWithoutLock() {
+        List<Long> result = db.filterRecoverLog(1, 1, null, null);
+    }
+
+    @Test
+    public void testRecoverLogFilesEmpty() {
+        db.getMutex().lock();
+        Pair<Status, Pair<Long, Boolean>> result = db.recoverLogFiles(Lists.newArrayList(), null);
+
+        assertTrue(result.getKey().isOk());
+        assertEquals(0L, result.getValue().getKey().longValue());
+        assertEquals(false, result.getValue().getValue());
+    }
+
+    @Test
+    public void testRecoverLogFilesError() {
+        db.getMutex().lock();
+
+        doReturn(new RecoverLogFileResult(Status.IOError("force recover error"))).when(spyDB).recoverLogFile(
+                anyLong(), anyBoolean(), any());
+        Pair<Status, Pair<Long, Boolean>> result = spyDB.recoverLogFiles(Lists.newArrayList(1L), null);
+
+        assertEquals("force recover error", result.getKey().getMessage());
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testRecoverLogFilesWithoutLock() {
+        db.recoverLogFiles(Lists.newArrayList(), null);
+    }
+
+    @Test
+    public void testRecoverLogFiles1() {
+        db.getMutex().lock();
+
+        final long[] sequence = {db.getVersions().getNextFileNumber()};
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                return new RecoverLogFileResult(Status.OK(), false, sequence[0]++);
+            }
+        }).when(spyDB).recoverLogFile(anyLong(), anyBoolean(), any());
+        Pair<Status, Pair<Long, Boolean>> result = spyDB.recoverLogFiles(Lists.newArrayList(11L, 12L, 13L, 14L), null);
+
+        assertTrue(result.getKey().isOk());
+        assertEquals(sequence[0] - 1, result.getValue().getKey().longValue());
+        assertFalse(result.getValue().getValue());
+        assertEquals(15, spyDB.getVersions().getNextFileNumber());
+    }
+
+    @Test
+    public void testRecoverLogFiles2() {
+        db.getMutex().lock();
+
+        final long[] sequence = {db.getVersions().getNextFileNumber()};
+        doReturn(new RecoverLogFileResult(Status.OK(), true, 0L)).doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                return new RecoverLogFileResult(Status.OK(), false, sequence[0]++);
+            }
+        }).when(spyDB).recoverLogFile(anyLong(), anyBoolean(), any());
+        Pair<Status, Pair<Long, Boolean>> result = spyDB.recoverLogFiles(Lists.newArrayList(11L, 12L, 13L, 14L), null);
+
+        assertTrue(result.getKey().isOk());
+        assertEquals(sequence[0] - 1, result.getValue().getKey().longValue());
+        assertTrue(result.getValue().getValue());
+        assertEquals(15, spyDB.getVersions().getNextFileNumber());
+    }
+
+    @Test
+    public void testRecoverRecoverLogFilesError() {
+        db.getMutex().lock();
+        db.getOptions().setCreateIfMissing(true);
+        doReturn(new Pair<>(Status.Corruption("force recover log files error"), null)).when(spyDB).recoverLogFiles(anyList(), any());
+
+        Pair<Status, Boolean> pair = spyDB.recover(null);
+        assertEquals("force recover log files error", pair.getKey().getMessage());
+    }
+
+    @Test
+    public void testRecoverWhenCreateNewDB() throws IOException {
+        db.getMutex().lock();
+        db.getOptions().setCreateIfMissing(true);
+        TestUtils.deleteDirectory(dbname);
+
+        assertNull(db.getDbLock());
+        assertEquals(0, db.getVersions().getManifestFileNumber());
+        assertEquals(2, db.getVersions().getNextFileNumber());
+
+        VersionEdit edit = new VersionEdit();
+        Pair<Status, Boolean> pair = db.recover(edit);
+
+        assertTrue(pair.getKey().isOk());
+        assertTrue(pair.getValue());
+        assertNotNull(db.getDbLock());
+        assertEquals(2, db.getVersions().getManifestFileNumber());
+        assertEquals(3, db.getVersions().getNextFileNumber());
+        assertNull(db.getVersions().getDescriptorLog());
+        assertNull(db.getVersions().getDescriptorFile());
+        assertEquals(new VersionEdit(), edit);
+    }
+
+    @Test
+    public void testRecoverWhenCreateNewDBReuseManifest() throws IOException {
+        db.getMutex().lock();
+        db.getOptions().setCreateIfMissing(true);
+        db.getOptions().setReuseLogs(true);
+
+        TestUtils.deleteDirectory(dbname);
+
+        assertNull(db.getDbLock());
+        assertEquals(0, db.getVersions().getManifestFileNumber());
+        assertEquals(2, db.getVersions().getNextFileNumber());
+
+        VersionEdit edit = new VersionEdit();
+        Pair<Status, Boolean> pair = db.recover(edit);
+
+        assertTrue(pair.getKey().isOk());
+        assertFalse(pair.getValue());
+        assertNotNull(db.getDbLock());
+        assertEquals(1, db.getVersions().getManifestFileNumber());
+        assertEquals(3, db.getVersions().getNextFileNumber());
+        assertNotNull(db.getVersions().getDescriptorLog());
+        assertNotNull(db.getVersions().getDescriptorFile());
+        assertEquals(new VersionEdit(), edit);
+    }
+
+    @Test
+    public void testRecoverFromExistDb1() throws IOException {
+        db.getMutex().lock();
+        db.getOptions().setReuseLogs(true);
+        TestUtils.deleteDirectory(dbname);
+
+        prepareRecoverFromExistDb();
+
+        assertNull(db.getDbLock());
+        assertEquals(0, db.getVersions().getManifestFileNumber());
+        assertEquals(2, db.getVersions().getNextFileNumber());
+        assertEquals(0, db.getVersions().getLastSequence());
+        assertEquals(0, db.getVersions().getLogNumber());
+        assertEquals(0, db.getVersions().getPrevLogNumber());
+        assertEquals(0, db.getVersions().getLiveFiles().size());
+        assertNull(db.getMemtable());
+
+        VersionEdit edit = new VersionEdit();
+        Pair<Status, Boolean> pair = db.recover(edit);
+
+        assertTrue(pair.getKey().isOk());
+        assertTrue(pair.getValue());
+        assertNotNull(db.getDbLock());
+        assertEquals(9, db.getVersions().getManifestFileNumber());
+        assertEquals(18, db.getVersions().getNextFileNumber()); // recover log file write 2 level0 table
+        assertEquals(153, db.getVersions().getLastSequence());
+        assertEquals(10, db.getVersions().getLogNumber());
+        assertEquals(4, db.getVersions().getPrevLogNumber());
+        assertEquals(1, db.getVersions().getLiveFiles().size());
+        assertEquals(3L, db.getVersions().getLiveFiles().iterator().next().longValue());
+        assertNotNull(db.getVersions().getDescriptorLog());
+        assertNotNull(db.getVersions().getDescriptorFile());
+        assertNotNull(db.getMemtable());
+        assertEquals(2, edit.getNewFiles().size());
+        assertEquals(0, edit.getNewFiles().get(0).getKey().intValue());
+        assertEquals(0, edit.getNewFiles().get(1).getKey().intValue());
+        assertEquals(16, edit.getNewFiles().get(0).getValue().getFileNumber());
+        assertEquals(17, edit.getNewFiles().get(1).getValue().getFileNumber());
+        assertEquals(edit.getNewFiles().get(0).getValue().getSmallest(), edit.getNewFiles().get(0).getValue().getLargest());
+        assertEquals(edit.getNewFiles().get(1).getValue().getSmallest(), edit.getNewFiles().get(1).getValue().getLargest());
+        assertTrue(options.getEnv().isFileExists(FileName.tableFileName(dbname, 17)));
+        assertTrue(options.getEnv().isFileExists(FileName.tableFileName(dbname, 16)));
+    }
+
+    @Test
+    public void testRecoverFromExistDb2() throws IOException {
+        db.getMutex().lock();
+        TestUtils.deleteDirectory(dbname);
+
+        prepareRecoverFromExistDb();
+
+        assertNull(db.getDbLock());
+        assertEquals(0, db.getVersions().getManifestFileNumber());
+        assertEquals(2, db.getVersions().getNextFileNumber());
+        assertEquals(0, db.getVersions().getLastSequence());
+        assertEquals(0, db.getVersions().getLogNumber());
+        assertEquals(0, db.getVersions().getPrevLogNumber());
+        assertEquals(0, db.getVersions().getLiveFiles().size());
+        assertNull(db.getMemtable());
+
+        VersionEdit edit = new VersionEdit();
+        Pair<Status, Boolean> pair = db.recover(edit);
+
+        assertTrue(pair.getKey().isOk());
+        assertTrue(pair.getValue());
+        assertNotNull(db.getDbLock());
+        assertEquals(15, db.getVersions().getManifestFileNumber());
+        assertEquals(19, db.getVersions().getNextFileNumber()); // recover log file write 3 level0 table
+        assertEquals(153, db.getVersions().getLastSequence());
+        assertEquals(10, db.getVersions().getLogNumber());
+        assertEquals(4, db.getVersions().getPrevLogNumber());
+        assertEquals(1, db.getVersions().getLiveFiles().size());
+        assertEquals(3L, db.getVersions().getLiveFiles().iterator().next().longValue());
+        assertNull(db.getVersions().getDescriptorLog());
+        assertNull(db.getVersions().getDescriptorFile());
+        assertNull(db.getMemtable());
+        assertEquals(3, edit.getNewFiles().size());
+        assertEquals(0, edit.getNewFiles().get(0).getKey().intValue());
+        assertEquals(0, edit.getNewFiles().get(1).getKey().intValue());
+        assertEquals(0, edit.getNewFiles().get(2).getKey().intValue());
+        assertEquals(16, edit.getNewFiles().get(0).getValue().getFileNumber());
+        assertEquals(17, edit.getNewFiles().get(1).getValue().getFileNumber());
+        assertEquals(18, edit.getNewFiles().get(2).getValue().getFileNumber());
+        assertEquals(edit.getNewFiles().get(0).getValue().getSmallest(), edit.getNewFiles().get(0).getValue().getLargest());
+        assertEquals(edit.getNewFiles().get(1).getValue().getSmallest(), edit.getNewFiles().get(1).getValue().getLargest());
+        assertEquals(edit.getNewFiles().get(2).getValue().getSmallest(), edit.getNewFiles().get(2).getValue().getLargest());
+        assertTrue(options.getEnv().isFileExists(FileName.tableFileName(dbname, 18)));
+        assertTrue(options.getEnv().isFileExists(FileName.tableFileName(dbname, 17)));
+        assertTrue(options.getEnv().isFileExists(FileName.tableFileName(dbname, 16)));
+    }
+
+    private void prepareRecoverFromExistDb() {
+        options.getEnv().createDir(dbname);
+        String manifest = FileName.descriptorFileName(dbname, 9);
+
+        VersionEdit edit = new VersionEdit();
+        edit.setLogNumber(10);
+        edit.setPrevLogNumber(4);
+        edit.setLastSequence(100);
+        edit.setNextFileNumber(15);
+        edit.setComparatorName(db.getInternalKeyComparator().getUserComparator().name());
+        Vector<Pair<Integer, FileMetaData>> vector = new Vector<>();
+        vector.add(new Pair<>(0, new FileMetaData(3, 0L, new InternalKey("a", 10L), new InternalKey("b", 20L))));
+        edit.setNewFiles(vector);
+
+        options.getEnv().newWritableFile(FileName.tableFileName(dbname, 3));
+
+        Pair<Status, WritableFile> writable = options.getEnv().newWritableFile(manifest);
+        assertTrue(writable.getKey().isOk());
+        LogWriter logWriter = new LogWriter(writable.getValue());
+        StringBuilder builder = new StringBuilder();
+        edit.encodeTo(builder);
+        logWriter.addRecord(builder.toString());
+        writable.getValue().flush();
+        writable.getValue().sync();
+        writable.getValue().close();
+
+        FileName.setCurrentFile(options.getEnv(), dbname, 9);
+
+        // log
+        List<Long> logs = Lists.newArrayList(4L, 9L, 10L, 11L);
+        long sequence = 150L;
+        for(Long log : logs) {
+            WriteBatch writeBatch = new WriteBatch();
+            writeBatch.setSequence(sequence++);
+            writeBatch.put(TestUtils.randomKey(5), TestUtils.randomString(6));
+
+            String logFileName = FileName.logFileName(dbname, log);
+            writable = options.getEnv().newWritableFile(logFileName);
+            assertTrue(writable.getKey().isOk());
+
+            logWriter = new LogWriter(writable.getValue());
+            String record = String.valueOf(writeBatch.encode());
+            logWriter.addRecord(record);
+
+            writable.getValue().flush();
+            writable.getValue().sync();
+            writable.getValue().close();
+        }
+    }
 }

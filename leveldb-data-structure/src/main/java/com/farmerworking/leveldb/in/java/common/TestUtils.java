@@ -1,5 +1,10 @@
 package com.farmerworking.leveldb.in.java.common;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Random;
 
 public class TestUtils {
@@ -41,5 +46,13 @@ public class TestUtils {
             builder.append(s);
         }
         return builder.substring(0, len);
+    }
+
+    public static void deleteDirectory(String directory) throws IOException {
+        Files.walk(Paths.get(directory))
+                .map(Path::toFile)
+                .forEach(File::delete);
+
+        new File(directory).delete();
     }
 }

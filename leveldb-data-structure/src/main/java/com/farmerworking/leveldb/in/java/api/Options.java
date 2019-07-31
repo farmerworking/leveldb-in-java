@@ -116,6 +116,14 @@ public class Options {
     // Default: 1000
     int maxOpenFiles = 1000;
 
+    // If true, the database will be created if it is missing.
+    // Default: false
+    boolean createIfMissing;
+
+    // If true, an error is raised if the database already exists.
+    // Default: false
+    boolean errorIfExists;
+
     public interface Logger {
         public static void log(Logger logger, String msg, String ... args) {
             if (logger != null) {
@@ -143,5 +151,7 @@ public class Options {
         this.reuseLogs = options.reuseLogs;
         this.paranoidChecks = options.paranoidChecks;
         this.blockCache = options.blockCache;
+        this.createIfMissing = options.createIfMissing;
+        this.errorIfExists = options.errorIfExists;
     }
 }
