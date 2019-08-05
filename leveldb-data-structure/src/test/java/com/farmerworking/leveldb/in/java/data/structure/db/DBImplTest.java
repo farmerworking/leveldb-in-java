@@ -5,6 +5,7 @@ import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.ReadOptions;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.common.TestUtils;
+import com.farmerworking.leveldb.in.java.data.structure.cache.TableCache;
 import com.farmerworking.leveldb.in.java.data.structure.log.ILogReader;
 import com.farmerworking.leveldb.in.java.data.structure.log.ILogWriter;
 import com.farmerworking.leveldb.in.java.data.structure.log.LogReader;
@@ -158,6 +159,7 @@ public class DBImplTest {
         assertTrue(db.getPendingOutputs().isEmpty());
         assertNotNull(db.getBuilder());
         assertEquals(Config.kNumLevels, db.getStats().length);
+        assertTrue(db.getBgError().isOk());
         for (int i = 0; i < Config.kNumLevels; i++) {
             assertNotNull(db.getStats()[i]);
         }
@@ -974,5 +976,96 @@ public class DBImplTest {
             writable.getValue().sync();
             writable.getValue().close();
         }
+    }
+
+    @Test
+    public void testDeleteObsoleteFiles() throws IOException {
+        TestUtils.deleteDirectory(dbname);
+        options.getEnv().createDir(dbname);
+        assertTrue(options.getEnv().getChildren(dbname).getValue().isEmpty());
+
+        String current = FileName.currentFileName(dbname);
+        String dbLock = FileName.lockFileName(dbname);
+        String infoLog = FileName.infoLogFileName(dbname);
+
+        long number = 100L;
+        String tmp1 = FileName.tempFileName(dbname, number ++);
+        long tmp2Number = number;
+        String tmp2 = FileName.tempFileName(dbname, number ++);
+
+        long table1Number = number;
+        String table1 = FileName.tableFileName(dbname, number ++);
+        long table2Number = number;
+        String table2 = FileName.tableFileName(dbname, number ++);
+
+        String manifest1 = FileName.descriptorFileName(dbname, number ++);
+        long manifest2Number = number;
+        String manifest2 = FileName.descriptorFileName(dbname, number ++);
+        String manifest3 = FileName.descriptorFileName(dbname, number ++);
+
+        long log1Number = number;
+        String log1 = FileName.logFileName(dbname, number ++);
+        String log2 = FileName.logFileName(dbname, number ++);
+        long log3Number = number;
+        String log3 = FileName.logFileName(dbname, number ++);
+        String log4 = FileName.logFileName(dbname, number ++);
+
+        ArrayList<String> files = Lists.newArrayList(
+                dbname + "/whatever", current, dbLock, infoLog, tmp1, tmp2, table1, table2, manifest1, manifest2, manifest3, log1, log2, log3, log4);
+        for(String file : files) {
+            Pair<Status, WritableFile> writable = options.getEnv().newWritableFile(file);
+            assertTrue(writable.getKey().isOk());
+        }
+        assertEquals(files.size(), options.getEnv().getChildren(dbname).getValue().size());
+
+        // prepare start
+        TableCache spyTableCache = spy(spyDB.getTableCache());
+        spyDB.setTableCache(spyTableCache);
+        spyDB.getVersions().setLogNumber(log3Number);
+        spyDB.getVersions().setPrevLogNumber(log1Number);
+        spyDB.getVersions().setManifestFileNumber(manifest2Number);
+        doReturn(Sets.newHashSet(table1Number)).when(spyDB).getLiveFiles();
+        spyDB.getPendingOutputs().add(tmp2Number);
+        // prepare end
+
+        // exception case start
+        bgError(files);
+        getChildrenError(files);
+        // exception case end
+
+        spyDB.deleteObsoleteFiles();
+
+        // verify
+        ArrayList<String> keep = Lists.newArrayList(
+                dbname + "/whatever", current, dbLock, infoLog, tmp2, table1, manifest2, manifest3, log1, log3, log4);
+        ArrayList<String> delete = Lists.newArrayList(
+                tmp1, table2, manifest1, log2);
+
+        for(String item : keep) {
+            assertTrue(item, options.getEnv().isFileExists(item));
+        }
+        for(String item : delete) {
+            assertFalse(options.getEnv().isFileExists(item));
+        }
+        assertEquals(keep.size(), options.getEnv().getChildren(dbname).getValue().size());
+        verify(spyTableCache, times(1)).evict(table2Number);
+    }
+
+    private void getChildrenError(ArrayList<String> files) {
+        doReturn(new Pair<>(Status.IOError(""), null)).when(spyDB).getChildren(anyString());
+
+        for(String item : files) {
+            assertTrue(item, options.getEnv().isFileExists(item));
+        }
+
+        doCallRealMethod().when(spyDB).getChildren(anyString());
+    }
+
+    private void bgError(ArrayList<String> files) {
+        spyDB.setBgError(Status.IOError(""));
+        for(String item : files) {
+            assertTrue(item, options.getEnv().isFileExists(item));
+        }
+        spyDB.setBgError(Status.OK());
     }
 }

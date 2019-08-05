@@ -23,7 +23,7 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Data
-public class DBImpl {
+public class DBImpl implements DB {
     static int NEW_DB_NEXT_FILE_NUMBER = 2;
     static int NEW_DB_LAST_SEQUENCE = 0;
     static int NEW_DB_LOG_NUMBER = 0;
@@ -67,6 +67,9 @@ public class DBImpl {
 
     private CompactionStats[] stats = new CompactionStats[Config.kNumLevels];
     private Builder builder = new Builder();
+
+    // Have we encountered a background error in paranoid mode?
+    private Status bgError = Status.OK();
 
     public DBImpl(Options rawOptions, String dbname) {
         this.env = rawOptions.getEnv();
@@ -248,8 +251,7 @@ public class DBImpl {
 
             if (parse != null) {
                 liveTableFileNumbers.remove(parse.getKey());
-                if (parse.getValue().equals(FileType.kLogFile) &&
-                        (parse.getKey() >= minLog || parse.getKey() == prevLog)) {
+                if (parse.getValue().equals(FileType.kLogFile) && isLogValid(parse.getKey(), minLog, prevLog)) {
                     logs.add(parse.getKey());
                 }
             }
@@ -257,6 +259,10 @@ public class DBImpl {
 
         Collections.sort(logs);
         return logs;
+    }
+
+    boolean isLogValid(long logNumber, long minLog, long prevLog) {
+        return logNumber >= minLog || logNumber == prevLog;
     }
 
     Set<Long> getLiveFiles() {
@@ -456,5 +462,63 @@ public class DBImpl {
 
     Log2MemtableReader getLog2MemtableReader(VersionEdit edit, String filename, SequentialFile file) {
         return new Log2MemtableReader(this, edit, filename, file);
+    }
+
+    public void deleteObsoleteFiles() {
+        if (bgError.isNotOk()) {
+            // After a background error, we don't know whether a new version may
+            // or may not have been committed, so we cannot safely garbage collect.
+            return;
+        }
+
+        // Make a set of all of the live files
+        Set<Long> liveFiles = getLiveFiles();
+        liveFiles.addAll(pendingOutputs);
+
+        Pair<Status, List<String>> pair = getChildren(this.dbname);
+        if (pair.getKey().isNotOk()) {
+            return; // Ignoring errors on purpose
+        }
+        for (String filename : pair.getValue()) {
+            Pair<Long, FileType> parse = FileName.parseFileName(filename);
+
+            if (parse != null) {
+                boolean keep = true;
+                Long number = parse.getKey();
+                FileType fileType = parse.getValue();
+
+                switch (fileType) {
+                    case kLogFile:
+                        keep = isLogValid(number, this.versions.getLogNumber(), this.versions.getPrevLogNumber());
+                        break;
+                    case kDescriptorFile:
+                        // Keep my manifest file, and any newer incarnations'
+                        // (in case there is a race that allows other incarnations)
+                        keep = (number >= this.versions.getManifestFileNumber());
+                        break;
+                    case kTableFile:
+                        keep = liveFiles.contains(number);
+                        break;
+                    case kTempFile:
+                        // Any temp files that are currently being written to must
+                        // be recorded in pending_outputs_, which is inserted into "live"
+                        keep = liveFiles.contains(number);
+                        break;
+                    case kCurrentFile:
+                    case kDBLockFile:
+                    case kInfoLogFile:
+                        keep = true;
+                        break;
+                }
+
+                if (!keep) {
+                    if (fileType == FileType.kTableFile) {
+                        tableCache.evict(number);
+                    }
+                    Options.Logger.log(this.options.getInfoLog(), String.format("Delete type=%d #%d", fileType.ordinal(), number));
+                    this.env.delete(this.dbname + "/" + filename);
+                }
+            }
+        }
     }
 }
