@@ -327,7 +327,7 @@ public abstract class EnvTest {
         int size = pair.getValue().size();
 
         Pair<Status, WritableFile> tmp = env.newWritableFile(dbname + "/" + TestUtils.randomString(6));
-        assertTrue(tmp.getKey().isOk());
+        assertTrue(tmp.getKey().getMessage(), tmp.getKey().isOk());
 
         pair = env.getChildren(dbname);
         assertTrue(pair.getKey().isOk());
