@@ -6,8 +6,8 @@ import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
 
 import java.nio.channels.FileLock;
-import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.Future;
 
 public interface Env {
     Pair<Status, WritableFile> newWritableFile(String filename) ;
@@ -35,6 +35,8 @@ public interface Env {
     Pair<Status, List<String>> getChildren(String dbname);
 
     Pair<Status, FileLock> lockFile(String lockFileName);
+
+    Future schedule(Runnable runnable);
 
     Status unlockFile(String lockFileName, FileLock fileLock);
 

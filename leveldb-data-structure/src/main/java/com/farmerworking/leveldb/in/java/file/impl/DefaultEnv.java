@@ -17,13 +17,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class DefaultEnv implements Env {
     private Set<String> locks = new HashSet<>();
+    private ExecutorService executorService = Executors.newSingleThreadExecutor();
 
     @Override
     public Pair<Status, WritableFile> newWritableFile(String filename) {
@@ -177,6 +180,11 @@ public class DefaultEnv implements Env {
         } catch (IOException e) {
             return new Pair<>(Status.IOError(lockFileName), null);
         }
+    }
+
+    @Override
+    public Future schedule(Runnable runnable) {
+        return executorService.submit(runnable);
     }
 
     @Override

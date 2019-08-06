@@ -11,6 +11,8 @@ import org.junit.Test;
 import java.nio.channels.FileLock;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -357,5 +359,21 @@ public abstract class EnvTest {
             pair = env.lockFile(lockFileName);
             assertTrue(pair.getKey().isOk());
         }
+    }
+
+    @Test
+    public void testSchedule() throws ExecutionException, InterruptedException {
+        Env env = getImpl();
+
+        final boolean[] run = {false};
+
+        Future future = env.schedule(new Runnable() {
+            @Override
+            public void run() {
+                run[0] = true;
+            }
+        });
+        future.get();
+        assertTrue(run[0]);
     }
 }
