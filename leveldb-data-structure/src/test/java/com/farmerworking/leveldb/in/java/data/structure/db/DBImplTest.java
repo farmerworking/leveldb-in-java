@@ -37,6 +37,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.Vector;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -1067,5 +1070,61 @@ public class DBImplTest {
             assertTrue(item, options.getEnv().isFileExists(item));
         }
         spyDB.setBgError(Status.OK());
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testRecordBackgroundErrorWithoutLock() {
+        db.recordBackgroundError(Status.OK());
+    }
+
+    @Test
+    public void testRecordBackgroundError() throws InterruptedException {
+        Status status = Status.Corruption("");
+        assertNotEquals(status, db.getBgError());
+
+        AtomicInteger signal = new AtomicInteger(0);
+
+        ReentrantLock lock = new ReentrantLock();
+        Condition cond = lock.newCondition();
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    while(true) {
+                        db.getMutex().lock();
+                        db.getBgCondition().await();
+                        signal.incrementAndGet();
+
+                        lock.lock();
+                        cond.signalAll();
+                        lock.unlock();
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } finally {
+                    db.getMutex().unlock();
+                }
+            }
+        }).start();
+
+        Thread.sleep(100);
+        db.getMutex().lock();
+        db.recordBackgroundError(status);
+        db.getMutex().unlock();
+
+        lock.lock();
+        cond.await();
+        lock.unlock();
+
+        assertEquals(status, db.getBgError());
+        assertEquals(1, signal.get());
+
+        db.getMutex().lock();
+        db.recordBackgroundError(Status.IOError(""));
+        db.getMutex().unlock();
+
+        assertEquals(status, db.getBgError());
+        assertEquals(1, signal.get());
     }
 }

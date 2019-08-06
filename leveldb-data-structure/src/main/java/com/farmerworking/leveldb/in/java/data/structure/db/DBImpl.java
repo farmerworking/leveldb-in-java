@@ -521,4 +521,11 @@ public class DBImpl implements DB {
             }
         }
     }
+    void recordBackgroundError(Status status) {
+        assert this.mutex.isHeldByCurrentThread();
+        if (this.bgError.isOk()) {
+            this.bgError = status;
+            this.bgCondition.signalAll();
+        }
+    }
 }
