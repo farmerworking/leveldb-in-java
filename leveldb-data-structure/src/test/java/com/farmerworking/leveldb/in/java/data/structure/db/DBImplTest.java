@@ -1168,4 +1168,73 @@ public class DBImplTest {
         assertTrue(spyDB.maybeScheduleCompaction());
         assertTrue(spyDB.isBgCompactionScheduled());
     }
+
+    @Test(expected = AssertionError.class)
+    public void testCompactMemtableWithoutLock() {
+        db.compactMemtable();
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testCompactMemtableWithoutImmemtable() {
+        db.getMutex().lock();
+        assertNull(db.getImmutableMemtable());
+        db.compactMemtable();
+    }
+
+    @Test
+    public void testCompactMemtableExceptionCase() {
+        spyDB.getMutex().lock();
+        spyDB.setImmutableMemtable(new Memtable(spyDB.getInternalKeyComparator()));
+
+        doReturn(Status.IOError("force write level 0 table error")).when(spyDB).writeLevel0Table(any(), any(), any());
+
+        assertTrue(spyDB.getBgError().isOk());
+        spyDB.compactMemtable();
+        assertEquals("force write level 0 table error", spyDB.getBgError().getMessage());
+
+        doReturn(Status.OK()).when(spyDB).writeLevel0Table(any(), any(), any());
+        spyDB.setBgError(Status.OK());
+        spyDB.getShuttingDown().set(true);
+        spyDB.compactMemtable();
+        assertEquals("Deleting DB during memtable compaction", spyDB.getBgError().getMessage());
+
+        spyDB.setBgError(Status.OK());
+        spyDB.getShuttingDown().set(false);
+        doReturn(Status.IOError("force log and apply error")).when(spyDB).logAndApply(any());
+        spyDB.compactMemtable();
+        assertEquals("force log and apply error", spyDB.getBgError().getMessage());
+    }
+
+    @Test
+    public void testCompactMemtable() {
+        db.getMutex().lock();
+        db.getOptions().setCreateIfMissing(true);
+        db.recover(new VersionEdit());
+
+        db.setImmutableMemtable(new Memtable(db.getInternalKeyComparator()));
+        db.getImmutableMemtable().add(10L, ValueType.kTypeValue, TestUtils.randomKey(5), TestUtils.randomString(6));
+        db.getVersions().setNextFileNumber(12);
+
+        String log8 = FileName.logFileName(dbname, 8);
+        String log9 = FileName.logFileName(dbname, 9);
+        options.getEnv().newWritableFile(log8);
+        options.getEnv().newWritableFile(log9);
+        assertTrue(options.getEnv().isFileExists(log8));
+        assertTrue(options.getEnv().isFileExists(log9));
+
+        Version before = db.getVersions().getCurrent();
+        int beforeTableCount = db.getVersions().getLiveFiles().size();
+        assertNotEquals(10, db.getVersions().getLogNumber());
+        db.setLogFileNumber(10L);
+        db.compactMemtable();
+        Version after = db.getVersions().getCurrent();
+
+        assertNotEquals(before, after);
+        assertEquals(beforeTableCount + 1, db.getVersions().getLiveFiles().size());
+        assertEquals(10, db.getVersions().getLogNumber());
+        assertNull(db.getImmutableMemtable());
+        assertFalse(db.getHasImmutableMemtable().get());
+        assertFalse(options.getEnv().isFileExists(log8));
+        assertFalse(options.getEnv().isFileExists(log9));
+    }
 }

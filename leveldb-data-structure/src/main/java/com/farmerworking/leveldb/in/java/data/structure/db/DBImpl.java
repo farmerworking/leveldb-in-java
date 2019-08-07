@@ -543,6 +543,35 @@ public class DBImpl implements DB {
             return true;
         }
     }
+    void compactMemtable() {
+        assert this.mutex.isHeldByCurrentThread();
+        assert this.immutableMemtable != null;
+
+        VersionEdit edit = new VersionEdit();
+        Version base = this.versions.getCurrent();
+        base.ref();
+        Status status = writeLevel0Table(this.immutableMemtable, edit, base);
+        base.unref();
+
+        if (status.isOk() && this.shuttingDown.get()) {
+            status = Status.IOError("Deleting DB during memtable compaction");
+        }
+
+        // Replace immutable memtable with the generated Table
+        if (status.isOk()) {
+            edit.setPrevLogNumber(0);
+            edit.setLogNumber(this.logFileNumber); // Earlier logs no longer needed
+            status = logAndApply(edit);
+        }
+
+        if (status.isOk()) {
+            this.immutableMemtable = null;
+            this.hasImmutableMemtable.set(false);
+            this.deleteObsoleteFiles();
+        } else {
+            recordBackgroundError(status);
+        }
+    }
     boolean isManualCompaction() {
         return this.manualCompaction != null;
     }
