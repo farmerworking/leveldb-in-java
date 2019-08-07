@@ -79,7 +79,7 @@ public class DBImpl implements DB {
         this.dbname = dbname;
         this.dbLock = null;
         this.mutex = new ReentrantLock();
-        this.shuttingDown = null;
+        this.shuttingDown = new AtomicBoolean(false);
         this.bgCondition = mutex.newCondition();
         this.memtable = null;
         this.immutableMemtable = null;
@@ -521,6 +521,28 @@ public class DBImpl implements DB {
             }
         }
     }
+
+    public boolean maybeScheduleCompaction() {
+        assert this.mutex.isHeldByCurrentThread();
+
+        if (bgCompactionScheduled) {
+            // already scheduled
+            return false;
+        } else if (shuttingDown.get()) {
+            // DB is being deleted; no more background compactions
+            return false;
+        } else if (bgError.isNotOk()) {
+            // Already got an error; no more changes
+            return false;
+        } else if (this.immutableMemtable == null && this.manualCompaction == null && !this.versions.needCompaction()) {
+            // No work to be done
+            return false;
+        } else {
+            bgCompactionScheduled = true;
+            schedule();
+            return true;
+        }
+    }
     boolean isManualCompaction() {
         return this.manualCompaction != null;
     }
@@ -531,5 +553,14 @@ public class DBImpl implements DB {
             this.bgError = status;
             this.bgCondition.signalAll();
         }
+    }
+
+    void schedule() {
+        env.schedule(new Runnable() {
+            @Override
+            public void run() {
+                backgroundCall();
+            }
+        });
     }
 }

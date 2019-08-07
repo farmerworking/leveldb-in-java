@@ -145,7 +145,7 @@ public class DBImplTest {
         assertTrue(StringUtils.isNotEmpty(db.getDbname()));
         assertNull(db.getDbLock());
         assertNotNull(db.getMutex());
-        assertNull(db.getShuttingDown());
+        assertFalse(db.getShuttingDown().get());
         assertNotNull(db.getBgCondition());
         assertNull(db.getMemtable());
         assertNull(db.getImmutableMemtable());
@@ -1134,5 +1134,38 @@ public class DBImplTest {
 
         db.setManualCompaction(new ManualCompaction());
         assertTrue(db.isManualCompaction());
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testMaybeScheduleCompactionWithoutLock() {
+        db.maybeScheduleCompaction();
+    }
+
+    @Test
+    public void testMaybeScheduleCompaction() {
+        spyDB.getMutex().lock();
+
+        doNothing().when(spyDB).schedule();
+
+        assertFalse(spyDB.maybeScheduleCompaction());
+
+        spyDB.setImmutableMemtable(new Memtable(spyDB.getInternalKeyComparator()));
+        assertTrue(spyDB.maybeScheduleCompaction());
+        assertTrue(spyDB.isBgCompactionScheduled());
+
+        spyDB.setBgCompactionScheduled(true);
+        assertFalse(spyDB.maybeScheduleCompaction());
+        spyDB.setBgCompactionScheduled(false);
+
+        spyDB.getShuttingDown().set(true);
+        assertFalse(spyDB.maybeScheduleCompaction());
+        spyDB.getShuttingDown().set(false);
+
+        spyDB.setBgError(Status.IOError(""));
+        assertFalse(spyDB.maybeScheduleCompaction());
+        spyDB.setBgError(Status.OK());
+
+        assertTrue(spyDB.maybeScheduleCompaction());
+        assertTrue(spyDB.isBgCompactionScheduled());
     }
 }
