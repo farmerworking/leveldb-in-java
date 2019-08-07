@@ -1127,4 +1127,12 @@ public class DBImplTest {
         assertEquals(status, db.getBgError());
         assertEquals(1, signal.get());
     }
+
+    @Test
+    public void testIsManualCompaction() {
+        assertFalse(db.isManualCompaction());
+
+        db.setManualCompaction(new ManualCompaction());
+        assertTrue(db.isManualCompaction());
+    }
 }

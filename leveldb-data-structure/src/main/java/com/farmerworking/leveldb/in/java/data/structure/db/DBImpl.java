@@ -521,6 +521,10 @@ public class DBImpl implements DB {
             }
         }
     }
+    boolean isManualCompaction() {
+        return this.manualCompaction != null;
+    }
+
     void recordBackgroundError(Status status) {
         assert this.mutex.isHeldByCurrentThread();
         if (this.bgError.isOk()) {
