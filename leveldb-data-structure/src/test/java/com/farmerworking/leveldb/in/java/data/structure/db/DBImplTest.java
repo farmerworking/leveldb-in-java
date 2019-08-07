@@ -201,7 +201,9 @@ public class DBImplTest {
     }
 
     @Test
-    public void testNewDBErrorCase() {
+    public void testNewDBErrorCase() throws IOException {
+        TestUtils.deleteDirectory(dbname);
+        options.getEnv().createDir(dbname);
         Env spyEnv = spy(options.getEnv());
         db.setEnv(spyEnv);
 
@@ -1108,7 +1110,7 @@ public class DBImplTest {
             }
         }).start();
 
-        Thread.sleep(100);
+        Thread.sleep(500);
         db.getMutex().lock();
         db.recordBackgroundError(status);
         db.getMutex().unlock();
