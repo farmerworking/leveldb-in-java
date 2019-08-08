@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.Vector;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -1285,5 +1286,35 @@ public class DBImplTest {
         assertTrue(signal.get());
         verify(spyDB, times(1)).maybeScheduleCompaction();
         verify(spyDB, times(1)).backgroundCompaction();
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testCleanupCompactionWithoutLock() {
+        db.cleanupCompaction(null);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testCleanupCompactionWithoutBuilderAndWithOutfile() {
+        db.getMutex().lock();
+        CompactionState compact = new CompactionState(null);
+        compact.outfile = mock(WritableFile.class);
+        db.cleanupCompaction(compact);
+    }
+
+    @Test
+    public void testCleanupCompaction() {
+        db.getMutex().lock();
+        CompactionState compact = new CompactionState(null);
+
+        db.pendingOutputs.add(1L);
+        db.pendingOutputs.add(2L);
+        db.pendingOutputs.add(3L);
+
+        compact.outputs.add(new CompactionState.Output(1L));
+        compact.outputs.add(new CompactionState.Output(3L));
+
+        db.cleanupCompaction(compact);
+        assertEquals(1, db.pendingOutputs.size());
+        assertEquals(2, db.pendingOutputs.iterator().next().longValue());
     }
 }

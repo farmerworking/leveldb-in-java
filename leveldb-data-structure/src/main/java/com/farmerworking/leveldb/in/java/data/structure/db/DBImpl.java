@@ -599,6 +599,23 @@ public class DBImpl implements DB {
             recordBackgroundError(status);
         }
     }
+
+    void cleanupCompaction(CompactionState compactionState) {
+        assert this.mutex.isHeldByCurrentThread();
+
+        if (compactionState.builder != null) {
+            // May happen if we get a shutdown call in the middle of compaction
+            compactionState.builder.abandon();
+        } else {
+            assert compactionState.outfile == null;
+        }
+
+        for (int i = 0; i < compactionState.outputs.size(); i++) {
+            CompactionState.Output output = compactionState.outputs.get(i);
+            pendingOutputs.remove(output.number);
+        }
+    }
+
     boolean isManualCompaction() {
         return this.manualCompaction != null;
     }
