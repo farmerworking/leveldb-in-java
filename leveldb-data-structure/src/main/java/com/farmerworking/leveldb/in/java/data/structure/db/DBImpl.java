@@ -543,6 +543,33 @@ public class DBImpl implements DB {
             return true;
         }
     }
+
+    boolean backgroundCall() {
+        try {
+            mutex.lock();
+            assert this.bgCompactionScheduled;
+
+            if (this.shuttingDown.get()) {
+                // No more background work when shutting down.
+                return false;
+            } else if (this.bgError.isNotOk()) {
+                // No more background work after a background error.
+                return false;
+            } else {
+                backgroundCompaction();
+            }
+
+            this.bgCompactionScheduled = false;
+            // Previous compaction may have produced too many files in a level,
+            // so reschedule another compaction if needed.
+            maybeScheduleCompaction();
+            this.bgCondition.signalAll();
+            return true;
+        } finally {
+            mutex.unlock();
+        }
+    }
+
     void compactMemtable() {
         assert this.mutex.isHeldByCurrentThread();
         assert this.immutableMemtable != null;

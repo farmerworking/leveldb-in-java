@@ -1239,4 +1239,51 @@ public class DBImplTest {
         assertFalse(options.getEnv().isFileExists(log8));
         assertFalse(options.getEnv().isFileExists(log9));
     }
+
+    @Test(expected = AssertionError.class)
+    public void testBackgroundCall1() {
+        db.setBgCompactionScheduled(false);
+        db.backgroundCall();
+    }
+
+    @Test
+    public void testBackgroundCall2() {
+        db.setBgCompactionScheduled(true);
+
+        db.getShuttingDown().set(true);
+        assertFalse(db.backgroundCall());
+        db.getShuttingDown().set(false);
+
+        db.setBgError(Status.IOError(""));
+        assertFalse(db.backgroundCall());
+        db.setBgError(Status.OK());
+    }
+
+    @Test
+    public void testBackgroundCall3() throws InterruptedException {
+        spyDB.setBgCompactionScheduled(true);
+
+        AtomicBoolean signal = new AtomicBoolean(false);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    spyDB.getMutex().lock();
+                    spyDB.getBgCondition().await();
+                    signal.set(true);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } finally {
+                    spyDB.getMutex().unlock();
+                }
+            }
+        }).start();
+        Thread.sleep(500);
+
+        assertTrue(spyDB.backgroundCall());
+        assertFalse(spyDB.isBgCompactionScheduled());
+        assertTrue(signal.get());
+        verify(spyDB, times(1)).maybeScheduleCompaction();
+        verify(spyDB, times(1)).backgroundCompaction();
+    }
 }
