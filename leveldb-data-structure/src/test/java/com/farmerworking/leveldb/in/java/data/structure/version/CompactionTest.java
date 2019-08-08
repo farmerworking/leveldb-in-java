@@ -2,6 +2,7 @@ package com.farmerworking.leveldb.in.java.data.structure.version;
 
 import com.farmerworking.leveldb.in.java.api.BytewiseComparator;
 import com.farmerworking.leveldb.in.java.api.Options;
+import com.farmerworking.leveldb.in.java.data.structure.cache.TableCache;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
 import com.farmerworking.leveldb.in.java.data.structure.memory.ValueType;
@@ -206,5 +207,25 @@ public class CompactionTest {
         assertTrue(spyCompaction.shouldStopBefore(new InternalKey("e", 5L, ValueType.kTypeValue)));
         assertEquals(0, spyCompaction.overlappedBytes);
         assertEquals(2, spyCompaction.grandparentIndex);
+    }
+
+    @Test
+    public void testReleaseInputs() {
+        Options options = new Options();
+        VersionSet versionSet = new VersionSet("", options, new TableCache("", options, 1024), new InternalKeyComparator(new BytewiseComparator()));
+        Version version = new Version(versionSet);
+        Compaction compaction = new Compaction(options, 0);
+        compaction.inputVersion = version;
+
+        version.ref();
+        version.ref();
+        version.ref();
+
+        int refCount = version.refs;
+
+        assertNotNull(compaction.inputVersion);
+        compaction.releaseInputs();
+        assertNull(compaction.inputVersion);
+        assertEquals(refCount, version.refs + 1);
     }
 }

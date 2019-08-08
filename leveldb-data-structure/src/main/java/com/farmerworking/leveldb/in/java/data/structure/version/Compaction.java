@@ -152,6 +152,13 @@ public class Compaction {
         }
     }
 
+    public void releaseInputs() {
+        if (this.inputVersion != null) {
+            this.inputVersion.unref();
+            this.inputVersion = null;
+        }
+    }
+
     // for ease unit test
     public long maxGrandParentOverlapBytes() {
         return VersionUtils.maxGrandParentOverlapBytes(inputVersion.options);
