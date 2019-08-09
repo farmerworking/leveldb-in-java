@@ -600,6 +600,34 @@ public class DBImpl implements DB {
         }
     }
 
+
+    Status openCompactionOutputFile(CompactionState compact) {
+        assert compact != null;
+        assert compact.builder == null;
+
+        long fileNumber;
+        try {
+            this.mutex.lock();
+            fileNumber = this.versions.newFileNumber();
+            this.pendingOutputs.add(fileNumber);
+            CompactionState.Output out = new CompactionState.Output(fileNumber);
+            compact.outputs.add(out);
+        } finally {
+            this.mutex.unlock();
+        }
+
+        String filename = FileName.tableFileName(this.dbname, fileNumber);
+        Pair<Status, WritableFile> pair = newWritableFile(filename);
+        if (pair.getKey().isOk()) {
+            compact.outfile = pair.getValue();
+            compact.builder = new TableBuilder(this.options, compact.outfile);
+        }
+        return pair.getKey();
+    }
+
+    Pair<Status, WritableFile> newWritableFile(String filename) {
+        return env.newWritableFile(filename);
+    }
     void cleanupCompaction(CompactionState compactionState) {
         assert this.mutex.isHeldByCurrentThread();
 

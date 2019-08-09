@@ -11,6 +11,7 @@ import com.farmerworking.leveldb.in.java.data.structure.log.ILogWriter;
 import com.farmerworking.leveldb.in.java.data.structure.log.LogReader;
 import com.farmerworking.leveldb.in.java.data.structure.log.LogWriter;
 import com.farmerworking.leveldb.in.java.data.structure.memory.*;
+import com.farmerworking.leveldb.in.java.data.structure.table.TableBuilder;
 import com.farmerworking.leveldb.in.java.data.structure.version.Config;
 import com.farmerworking.leveldb.in.java.data.structure.version.FileMetaData;
 import com.farmerworking.leveldb.in.java.data.structure.version.Version;
@@ -1316,5 +1317,52 @@ public class DBImplTest {
         db.cleanupCompaction(compact);
         assertEquals(1, db.pendingOutputs.size());
         assertEquals(2, db.pendingOutputs.iterator().next().longValue());
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testOpenCompactionOutputFileAssertion1() {
+        db.openCompactionOutputFile(null);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testOpenCompactionOutputFileAssertion2() {
+        CompactionState compact = new CompactionState(null);
+        compact.builder = mock(TableBuilder.class);
+
+        db.openCompactionOutputFile(compact);
+    }
+
+    @Test
+    public void testOpenCompactionOutputFileNewWritableFileError() {
+        doReturn(new Pair<>(Status.IOError("force new writable file error"), null)).when(spyDB).newWritableFile(anyString());
+
+        CompactionState compact = new CompactionState(null);
+        Status status = spyDB.openCompactionOutputFile(compact);
+        assertEquals("force new writable file error", status.getMessage());
+    }
+
+    @Test
+    public void testOpenCompactionOutputFile() {
+        CompactionState compact = new CompactionState(null);
+
+        long fileNumber = db.getVersions().getNextFileNumber();
+        assertFalse(db.getPendingOutputs().contains(fileNumber));
+        assertTrue(compact.outputs.isEmpty());
+        assertFalse(options.getEnv().isFileExists(FileName.tableFileName(dbname, fileNumber)));
+        assertNull(compact.builder);
+        assertNull(compact.outfile);
+
+        Status status = db.openCompactionOutputFile(compact);
+
+        assertTrue(status.isOk());
+        assertTrue(db.getPendingOutputs().contains(fileNumber));
+        assertEquals(1, compact.outputs.size());
+        CompactionState.Output output = compact.outputs.get(0);
+        assertEquals(fileNumber, output.number);
+        assertNull(output.smallest);
+        assertNull(output.largest);
+        assertTrue(options.getEnv().isFileExists(FileName.tableFileName(dbname, fileNumber)));
+        assertNotNull(compact.builder);
+        assertNotNull(compact.outfile);
     }
 }
