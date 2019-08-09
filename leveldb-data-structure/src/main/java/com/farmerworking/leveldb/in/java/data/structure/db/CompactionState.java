@@ -4,9 +4,11 @@ import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.table.TableBuilder;
 import com.farmerworking.leveldb.in.java.data.structure.version.Compaction;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
+import lombok.Data;
 
 import java.util.Vector;
 
+@Data
 public class CompactionState {
     private Compaction compaction;
 

@@ -4,10 +4,12 @@ import com.farmerworking.leveldb.in.java.api.Comparator;
 import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
+import lombok.Data;
 
 import java.util.Vector;
 
 // A Compaction encapsulates information about a compaction.
+@Data
 public class Compaction {
     private final int level;
 

@@ -2,15 +2,14 @@ package com.farmerworking.leveldb.in.java.data.structure.db;
 
 import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.api.Options;
+import com.farmerworking.leveldb.in.java.api.ReadOptions;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.data.structure.cache.ShardedLRUCache;
 import com.farmerworking.leveldb.in.java.data.structure.cache.TableCache;
 import com.farmerworking.leveldb.in.java.data.structure.log.*;
-import com.farmerworking.leveldb.in.java.data.structure.memory.IMemtable;
-import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
-import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
+import com.farmerworking.leveldb.in.java.data.structure.memory.*;
+import com.farmerworking.leveldb.in.java.data.structure.table.TableBuilder;
 import com.farmerworking.leveldb.in.java.data.structure.version.*;
-import com.farmerworking.leveldb.in.java.data.structure.memory.Memtable;
 import com.farmerworking.leveldb.in.java.file.*;
 import javafx.util.Pair;
 import lombok.Data;
@@ -600,6 +599,31 @@ public class DBImpl implements DB {
         }
     }
 
+    Status logAndApply(VersionEdit edit) {
+        return this.versions.logAndApply(edit, this.mutex);
+    }
+
+    Status installCompactionResults(CompactionState compact) {
+        assert this.mutex.isHeldByCurrentThread();
+        Options.Logger.log(options.getInfoLog(), String.format("Compacted %d@%d + %d@%d files => %d bytes",
+                compact.getCompaction().numInputFiles(0),
+                compact.getCompaction().getLevel(),
+                compact.getCompaction().numInputFiles(1),
+                compact.getCompaction().getLevel() + 1,
+                compact.totalBytes));
+
+        finalizeCompactionState(compact);
+        return logAndApply(compact.getCompaction().getEdit());
+    }
+
+    void finalizeCompactionState(CompactionState compact) {
+        compact.getCompaction().addInputDeletions(compact.getCompaction().getEdit());
+        int level = compact.getCompaction().getLevel();
+        for (int i = 0; i < compact.outputs.size(); i++) {
+            CompactionState.Output out = compact.outputs.get(i);
+            compact.getCompaction().getEdit().addFile(level + 1, out.number, out.fileSize, out.smallest, out.largest);
+        }
+    }
 
     Status openCompactionOutputFile(CompactionState compact) {
         assert compact != null;

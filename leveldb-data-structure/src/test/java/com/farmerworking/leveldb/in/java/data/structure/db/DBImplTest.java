@@ -12,10 +12,7 @@ import com.farmerworking.leveldb.in.java.data.structure.log.LogReader;
 import com.farmerworking.leveldb.in.java.data.structure.log.LogWriter;
 import com.farmerworking.leveldb.in.java.data.structure.memory.*;
 import com.farmerworking.leveldb.in.java.data.structure.table.TableBuilder;
-import com.farmerworking.leveldb.in.java.data.structure.version.Config;
-import com.farmerworking.leveldb.in.java.data.structure.version.FileMetaData;
-import com.farmerworking.leveldb.in.java.data.structure.version.Version;
-import com.farmerworking.leveldb.in.java.data.structure.version.VersionEdit;
+import com.farmerworking.leveldb.in.java.data.structure.version.*;
 import com.farmerworking.leveldb.in.java.data.structure.writebatch.WriteBatch;
 import com.farmerworking.leveldb.in.java.file.Env;
 import com.farmerworking.leveldb.in.java.file.FileName;
@@ -1280,7 +1277,7 @@ public class DBImplTest {
                 }
             }
         }).start();
-        Thread.sleep(500);
+        Thread.sleep(1000);
 
         assertTrue(spyDB.backgroundCall());
         assertFalse(spyDB.isBgCompactionScheduled());
@@ -1342,7 +1339,10 @@ public class DBImplTest {
     }
 
     @Test
-    public void testOpenCompactionOutputFile() {
+    public void testOpenCompactionOutputFile() throws IOException {
+        TestUtils.deleteDirectory(dbname);
+        options.getEnv().createDir(dbname);
+
         CompactionState compact = new CompactionState(null);
 
         long fileNumber = db.getVersions().getNextFileNumber();
@@ -1364,5 +1364,51 @@ public class DBImplTest {
         assertTrue(options.getEnv().isFileExists(FileName.tableFileName(dbname, fileNumber)));
         assertNotNull(compact.builder);
         assertNotNull(compact.outfile);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testInstallCompactionResultWithoutLock() {
+        db.installCompactionResults(null);
+    }
+
+    @Test
+    public void testInstallCompactionResultLogAndApplyError() {
+        doReturn(Status.IOError("force log and apply error")).when(spyDB).logAndApply(any());
+
+        Compaction compaction = new Compaction(options, 1);
+        CompactionState compact = new CompactionState(compaction);
+
+        spyDB.getMutex().lock();
+        Status status = spyDB.installCompactionResults(compact);
+        verify(spyDB, times(1)).finalizeCompactionState(compact);
+        assertEquals("force log and apply error", status.getMessage());
+    }
+
+    @Test
+    public void testFinalizeCompactionState() {
+        Compaction compaction = new Compaction(options, 1);
+        CompactionState compact = new CompactionState(compaction);
+
+        FileMetaData input1 = mock(FileMetaData.class);
+        doReturn(1L).when(input1).getFileNumber();
+        FileMetaData input2 = mock(FileMetaData.class);
+        doReturn(2L).when(input2).getFileNumber();
+        FileMetaData input3 = mock(FileMetaData.class);
+        doReturn(3L).when(input3).getFileNumber();
+
+        compaction.getInputs()[0].add(input1);
+        compaction.getInputs()[1].add(input2);
+        compaction.getInputs()[1].add(input3);
+
+        compact.outputs.add(mock(CompactionState.Output.class));
+        compact.outputs.add(mock(CompactionState.Output.class));
+
+        assertTrue(compaction.getEdit().getDeletedFiles().isEmpty());
+        assertTrue(compaction.getEdit().getNewFiles().isEmpty());
+
+        db.finalizeCompactionState(compact);
+
+        assertEquals(3, compaction.getEdit().getDeletedFiles().size());
+        assertEquals(2, compaction.getEdit().getNewFiles().size());
     }
 }
