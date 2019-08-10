@@ -620,8 +620,8 @@ public class DBImpl implements DB {
         compact.getCompaction().addInputDeletions(compact.getCompaction().getEdit());
         int level = compact.getCompaction().getLevel();
         for (int i = 0; i < compact.getOutputs().size(); i++) {
-            CompactionState.Output out = compact.getOutputs().get(i);
-            compact.getCompaction().getEdit().addFile(level + 1, out.number, out.fileSize, out.smallest, out.largest);
+            Output out = compact.getOutputs().get(i);
+            compact.getCompaction().getEdit().addFile(level + 1, out.getNumber(), out.getFileSize(), out.getSmallest(), out.getLargest());
         }
     }
 
@@ -634,7 +634,7 @@ public class DBImpl implements DB {
             this.mutex.lock();
             fileNumber = this.versions.newFileNumber();
             this.pendingOutputs.add(fileNumber);
-            CompactionState.Output out = new CompactionState.Output(fileNumber);
+            Output out = new Output(fileNumber);
             compact.add(out);
         } finally {
             this.mutex.unlock();
@@ -663,8 +663,8 @@ public class DBImpl implements DB {
         }
 
         for (int i = 0; i < compactionState.getOutputs().size(); i++) {
-            CompactionState.Output output = compactionState.getOutputs().get(i);
-            pendingOutputs.remove(output.number);
+            Output output = compactionState.getOutputs().get(i);
+            pendingOutputs.remove(output.getNumber());
         }
     }
 

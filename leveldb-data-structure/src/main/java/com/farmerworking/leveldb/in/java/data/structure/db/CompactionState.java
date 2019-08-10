@@ -1,6 +1,5 @@
 package com.farmerworking.leveldb.in.java.data.structure.db;
 
-import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.table.TableBuilder;
 import com.farmerworking.leveldb.in.java.data.structure.version.Compaction;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
@@ -17,17 +16,6 @@ public class CompactionState {
     // Therefore if we have seen a sequence number S <= smallest_snapshot,
     // we can drop all entries for the same key with sequence numbers < S.
     private Long smallestSnapshot;
-
-    public static class Output {
-        long number;
-        long fileSize;
-        InternalKey smallest;
-        InternalKey largest;
-
-        public Output(long number) {
-            this.number = number;
-        }
-    }
 
     private Vector<Output> outputs;
 

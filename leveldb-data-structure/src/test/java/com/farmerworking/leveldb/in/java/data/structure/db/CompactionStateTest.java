@@ -24,8 +24,8 @@ public class CompactionStateTest {
     public void testLastOutput() {
         CompactionState compactionState = new CompactionState(null);
 
-        CompactionState.Output out1 = mock(CompactionState.Output.class);
-        CompactionState.Output out2 = mock(CompactionState.Output.class);
+        Output out1 = mock(Output.class);
+        Output out2 = mock(Output.class);
 
         compactionState.add(out1);
         compactionState.add(out2);
