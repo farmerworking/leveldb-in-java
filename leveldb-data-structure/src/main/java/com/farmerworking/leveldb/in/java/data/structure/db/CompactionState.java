@@ -16,7 +16,7 @@ public class CompactionState {
     // will never have to service a snapshot below smallest_snapshot.
     // Therefore if we have seen a sequence number S <= smallest_snapshot,
     // we can drop all entries for the same key with sequence numbers < S.
-    private long smallestSnapshot;
+    private Long smallestSnapshot;
 
     public static class Output {
         long number;
@@ -29,17 +29,13 @@ public class CompactionState {
         }
     }
 
-    Vector<Output> outputs;
+    private Vector<Output> outputs;
 
     // State kept for output being generated
-    WritableFile outfile;
-    TableBuilder builder;
+    private WritableFile outfile;
+    private TableBuilder builder;
 
-    long totalBytes;
-
-    Output currentOutput() {
-        return outputs.get(outputs.size() - 1);
-    }
+    private long totalBytes;
 
     public CompactionState(Compaction compaction) {
         this.compaction = compaction;
@@ -47,5 +43,20 @@ public class CompactionState {
         this.builder = null;
         this.totalBytes = 0;
         this.outputs = new Vector<>();
+    }
+
+    Output currentOutput() {
+        if (outputs.isEmpty()) {
+            return null;
+        }
+        return outputs.get(outputs.size() - 1);
+    }
+
+    void add(Output output) {
+        outputs.add(output);
+    }
+
+    void addBytes(long bytes) {
+        this.totalBytes += bytes;
     }
 }

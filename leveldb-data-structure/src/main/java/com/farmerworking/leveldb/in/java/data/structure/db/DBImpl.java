@@ -610,7 +610,7 @@ public class DBImpl implements DB {
                 compact.getCompaction().getLevel(),
                 compact.getCompaction().numInputFiles(1),
                 compact.getCompaction().getLevel() + 1,
-                compact.totalBytes));
+                compact.getTotalBytes()));
 
         finalizeCompactionState(compact);
         return logAndApply(compact.getCompaction().getEdit());
@@ -619,15 +619,15 @@ public class DBImpl implements DB {
     void finalizeCompactionState(CompactionState compact) {
         compact.getCompaction().addInputDeletions(compact.getCompaction().getEdit());
         int level = compact.getCompaction().getLevel();
-        for (int i = 0; i < compact.outputs.size(); i++) {
-            CompactionState.Output out = compact.outputs.get(i);
+        for (int i = 0; i < compact.getOutputs().size(); i++) {
+            CompactionState.Output out = compact.getOutputs().get(i);
             compact.getCompaction().getEdit().addFile(level + 1, out.number, out.fileSize, out.smallest, out.largest);
         }
     }
 
     Status openCompactionOutputFile(CompactionState compact) {
         assert compact != null;
-        assert compact.builder == null;
+        assert compact.getBuilder() == null;
 
         long fileNumber;
         try {
@@ -635,7 +635,7 @@ public class DBImpl implements DB {
             fileNumber = this.versions.newFileNumber();
             this.pendingOutputs.add(fileNumber);
             CompactionState.Output out = new CompactionState.Output(fileNumber);
-            compact.outputs.add(out);
+            compact.add(out);
         } finally {
             this.mutex.unlock();
         }
@@ -643,8 +643,8 @@ public class DBImpl implements DB {
         String filename = FileName.tableFileName(this.dbname, fileNumber);
         Pair<Status, WritableFile> pair = newWritableFile(filename);
         if (pair.getKey().isOk()) {
-            compact.outfile = pair.getValue();
-            compact.builder = new TableBuilder(this.options, compact.outfile);
+            compact.setOutfile(pair.getValue());
+            compact.setBuilder(new TableBuilder(this.options, compact.getOutfile()));
         }
         return pair.getKey();
     }
@@ -655,15 +655,15 @@ public class DBImpl implements DB {
     void cleanupCompaction(CompactionState compactionState) {
         assert this.mutex.isHeldByCurrentThread();
 
-        if (compactionState.builder != null) {
+        if (compactionState.getBuilder() != null) {
             // May happen if we get a shutdown call in the middle of compaction
-            compactionState.builder.abandon();
+            compactionState.getBuilder().abandon();
         } else {
-            assert compactionState.outfile == null;
+            assert compactionState.getOutfile() == null;
         }
 
-        for (int i = 0; i < compactionState.outputs.size(); i++) {
-            CompactionState.Output output = compactionState.outputs.get(i);
+        for (int i = 0; i < compactionState.getOutputs().size(); i++) {
+            CompactionState.Output output = compactionState.getOutputs().get(i);
             pendingOutputs.remove(output.number);
         }
     }

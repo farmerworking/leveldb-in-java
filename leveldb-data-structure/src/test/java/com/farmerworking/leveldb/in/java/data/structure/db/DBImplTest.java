@@ -1295,7 +1295,7 @@ public class DBImplTest {
     public void testCleanupCompactionWithoutBuilderAndWithOutfile() {
         db.getMutex().lock();
         CompactionState compact = new CompactionState(null);
-        compact.outfile = mock(WritableFile.class);
+        compact.setOutfile(mock(WritableFile.class));
         db.cleanupCompaction(compact);
     }
 
@@ -1308,8 +1308,8 @@ public class DBImplTest {
         db.pendingOutputs.add(2L);
         db.pendingOutputs.add(3L);
 
-        compact.outputs.add(new CompactionState.Output(1L));
-        compact.outputs.add(new CompactionState.Output(3L));
+        compact.add(new CompactionState.Output(1L));
+        compact.add(new CompactionState.Output(3L));
 
         db.cleanupCompaction(compact);
         assertEquals(1, db.pendingOutputs.size());
@@ -1324,7 +1324,7 @@ public class DBImplTest {
     @Test(expected = AssertionError.class)
     public void testOpenCompactionOutputFileAssertion2() {
         CompactionState compact = new CompactionState(null);
-        compact.builder = mock(TableBuilder.class);
+        compact.setBuilder(mock(TableBuilder.class));
 
         db.openCompactionOutputFile(compact);
     }
@@ -1347,23 +1347,23 @@ public class DBImplTest {
 
         long fileNumber = db.getVersions().getNextFileNumber();
         assertFalse(db.getPendingOutputs().contains(fileNumber));
-        assertTrue(compact.outputs.isEmpty());
+        assertTrue(compact.getOutputs().isEmpty());
         assertFalse(options.getEnv().isFileExists(FileName.tableFileName(dbname, fileNumber)));
-        assertNull(compact.builder);
-        assertNull(compact.outfile);
+        assertNull(compact.getBuilder());
+        assertNull(compact.getOutfile());
 
         Status status = db.openCompactionOutputFile(compact);
 
         assertTrue(status.isOk());
         assertTrue(db.getPendingOutputs().contains(fileNumber));
-        assertEquals(1, compact.outputs.size());
-        CompactionState.Output output = compact.outputs.get(0);
+        assertEquals(1, compact.getOutputs().size());
+        CompactionState.Output output = compact.getOutputs().get(0);
         assertEquals(fileNumber, output.number);
         assertNull(output.smallest);
         assertNull(output.largest);
         assertTrue(options.getEnv().isFileExists(FileName.tableFileName(dbname, fileNumber)));
-        assertNotNull(compact.builder);
-        assertNotNull(compact.outfile);
+        assertNotNull(compact.getBuilder());
+        assertNotNull(compact.getOutfile());
     }
 
     @Test(expected = AssertionError.class)
@@ -1400,8 +1400,8 @@ public class DBImplTest {
         compaction.getInputs()[1].add(input2);
         compaction.getInputs()[1].add(input3);
 
-        compact.outputs.add(mock(CompactionState.Output.class));
-        compact.outputs.add(mock(CompactionState.Output.class));
+        compact.getOutputs().add(mock(CompactionState.Output.class));
+        compact.getOutputs().add(mock(CompactionState.Output.class));
 
         assertTrue(compaction.getEdit().getDeletedFiles().isEmpty());
         assertTrue(compaction.getEdit().getNewFiles().isEmpty());
