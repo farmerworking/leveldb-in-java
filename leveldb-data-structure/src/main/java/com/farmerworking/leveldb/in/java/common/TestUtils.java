@@ -35,6 +35,17 @@ public class TestUtils {
         return builder.toString();
     }
 
+    public static String randomA2Z(int len) {
+        Random random = new Random();
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < len; i++) {
+            builder.append((char)(
+                    (int)'a' + random.nextInt(26)
+            ));   // ' ' .. '~'
+        }
+        return builder.toString();
+    }
+
     public static String compressibleString(double compressed_fraction, int len) {
         int raw = (int)(len * compressed_fraction);
         if (raw < 1) raw = 1;

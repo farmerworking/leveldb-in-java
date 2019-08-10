@@ -161,7 +161,7 @@ public abstract class EnvTest {
     public void testGetFileSize() {
         Options options = new Options();
         String dbname = options.getEnv().getTestDirectory().getValue();
-        String filename = dbname + "/" + TestUtils.randomString(5);
+        String filename = dbname + "/" + TestUtils.randomA2Z(5);
 
         Pair<Status, Boolean> tmp = getImpl().delete(filename);
         assertTrue(tmp.getKey().isOk());
@@ -174,6 +174,7 @@ public abstract class EnvTest {
         assertFalse(exists);
 
         Pair<Status, WritableFile> pair = getImpl().newWritableFile(filename);
+        assertTrue(pair.getKey().toString(), pair.getKey().isOk());
         Pair<Status, Long> tmp1 = getImpl().getFileSize(filename);
         assertTrue(tmp1.getKey().toString(), tmp1.getKey().isOk());
         assertEquals(0L, tmp1.getValue().longValue());
@@ -227,7 +228,7 @@ public abstract class EnvTest {
         Env.writeStringToFileSync(getImpl(), s, filename);
 
         Pair<Status, String> pair2 = Env.readFileToString(options.getEnv(), filename);
-        assertTrue(pair2.getKey().isOk());
+        assertTrue(pair2.getKey().toString(), pair2.getKey().isOk());
         assertEquals(s, pair2.getValue());
 
         String s2 = StringUtils.repeat(s, 10000);
