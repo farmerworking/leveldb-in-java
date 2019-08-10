@@ -12,6 +12,7 @@ import com.farmerworking.leveldb.in.java.data.structure.log.LogReader;
 import com.farmerworking.leveldb.in.java.data.structure.log.LogWriter;
 import com.farmerworking.leveldb.in.java.data.structure.memory.*;
 import com.farmerworking.leveldb.in.java.data.structure.table.TableBuilder;
+import com.farmerworking.leveldb.in.java.data.structure.utils.ConsoleLogger;
 import com.farmerworking.leveldb.in.java.data.structure.version.*;
 import com.farmerworking.leveldb.in.java.data.structure.writebatch.WriteBatch;
 import com.farmerworking.leveldb.in.java.file.Env;
@@ -1410,5 +1411,148 @@ public class DBImplTest {
 
         assertEquals(3, compaction.getEdit().getDeletedFiles().size());
         assertEquals(2, compaction.getEdit().getNewFiles().size());
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testFinishCompactionOutoutFileException1() {
+        db.finishCompactionOutputFile(null, null);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testFinishCompactionOutoutFileException2() {
+        db.finishCompactionOutputFile(mock(CompactionState.class), null);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testFinishCompactionOutoutFileException3() {
+        CompactionState compact = mock(CompactionState.class);
+        doReturn(mock(WritableFile.class)).when(compact).getOutfile();
+        db.finishCompactionOutputFile(compact, null);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testFinishCompactionOutoutFileException4() {
+        CompactionState compact = mock(CompactionState.class);
+        doReturn(mock(WritableFile.class)).when(compact).getOutfile();
+        doReturn(mock(TableBuilder.class)).when(compact).getBuilder();
+
+        Output output = mock(Output.class);
+        doReturn(0L).when(output).getNumber();
+        doReturn(output).when(compact).currentOutput();
+
+        db.finishCompactionOutputFile(compact, null);
+    }
+
+    @Test
+    public void testFinishCompactionOutputFileIteratorStatusError() {
+        CompactionState compact = spy(new CompactionState(null));
+        db.openCompactionOutputFile(compact);
+
+        TableBuilder builder = mock(TableBuilder.class);
+        doReturn(builder).when(compact).getBuilder();
+
+        Output output = mock(Output.class);
+        doReturn(10L).when(output).getNumber();
+        doReturn(output).when(compact).currentOutput();
+
+        Iterator<String, String> iter = mock(Iterator.class);
+
+        doReturn(Status.IOError("force iter status error")).when(iter).status();
+        Status status = db.finishCompactionOutputFile(compact, iter);
+        verify(builder, times(1)).abandon();
+        assertEquals("force iter status error", status.getMessage());
+    }
+
+    @Test
+    public void testFinishCompactionOutputFileSyncError() {
+        CompactionState compact = spy(new CompactionState(null));
+        db.openCompactionOutputFile(compact);
+
+        Output output = mock(Output.class);
+        doReturn(10L).when(output).getNumber();
+        doReturn(output).when(compact).currentOutput();
+
+        Iterator<String, String> iter = mock(Iterator.class);
+        doReturn(Status.OK()).when(iter).status();
+
+        WritableFile outfile = spy(compact.getOutfile());
+        compact.setOutfile(outfile);
+        doReturn(Status.IOError("force sync error")).when(outfile).sync();
+
+        Status status = db.finishCompactionOutputFile(compact, iter);
+        assertEquals("force sync error", status.getMessage());
+    }
+
+    @Test
+    public void testFinishCompactionOutputFileCloseError() {
+        CompactionState compact = spy(new CompactionState(null));
+        db.openCompactionOutputFile(compact);
+
+        Output output = mock(Output.class);
+        doReturn(10L).when(output).getNumber();
+        doReturn(output).when(compact).currentOutput();
+
+        Iterator<String, String> iter = mock(Iterator.class);
+        doReturn(Status.OK()).when(iter).status();
+
+        WritableFile outfile = spy(compact.getOutfile());
+        compact.setOutfile(outfile);
+        doReturn(Status.IOError("force close error")).when(outfile).close();
+
+        Status status = db.finishCompactionOutputFile(compact, iter);
+        assertEquals("force close error", status.getMessage());
+    }
+
+    @Test
+    public void testFinishCompactionOutputFileTableCacheVerifyError() {
+        CompactionState compact = new CompactionState(null);
+        db.openCompactionOutputFile(compact);
+
+        TableBuilder builder = compact.getBuilder();
+        builder.add(new InternalKey(TestUtils.randomKey(5), 100L).encode(), TestUtils.randomString(6));
+
+        Iterator<String, String> iter = mock(Iterator.class);
+        doReturn(Status.OK()).when(iter).status();
+
+        TableCache tableCache = spy(db.getTableCache());
+        db.setTableCache(tableCache);
+        Iterator returnIter = mock(Iterator.class);
+        doReturn(Status.IOError("force table cache verify error")).when(returnIter).status();
+        doReturn(new Pair<>(returnIter, null)).when(tableCache).iterator(any(), anyLong(), anyLong());
+
+        Status status = db.finishCompactionOutputFile(compact, iter);
+        assertEquals("force table cache verify error", status.getMessage());
+    }
+
+    @Test
+    public void testFinishCompactionOutputFile() {
+        db.getOptions().setInfoLog(new ConsoleLogger());
+
+        Compaction compaction = mock(Compaction.class);
+        doReturn(3).when(compaction).getLevel();
+
+        CompactionState compact = new CompactionState(compaction);
+        db.openCompactionOutputFile(compact);
+
+        TableBuilder builder = spy(compact.getBuilder());
+        compact.setBuilder(builder);
+        builder.add(new InternalKey(TestUtils.randomKey(5), 100L).encode(), TestUtils.randomString(6));
+
+        assertNotNull(compact.getBuilder());
+        assertNotNull(compact.getOutfile());
+        assertEquals(0, compact.currentOutput().getFileSize());
+        long before = compact.getTotalBytes();
+
+        Iterator<String, String> iter = mock(Iterator.class);
+        doReturn(Status.OK()).when(iter).status();
+
+        Status status = db.finishCompactionOutputFile(compact, iter);
+
+        assertTrue(status.isOk());
+        assertNull(compact.getBuilder());
+        assertNull(compact.getOutfile());
+        assertEquals(builder.fileSize(), compact.currentOutput().getFileSize());
+        assertEquals(before + builder.fileSize(), compact.getTotalBytes());
+        verify(builder, times(1)).finish();
     }
 }

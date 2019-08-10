@@ -652,6 +652,52 @@ public class DBImpl implements DB {
     Pair<Status, WritableFile> newWritableFile(String filename) {
         return env.newWritableFile(filename);
     }
+
+    Status finishCompactionOutputFile(CompactionState compact, Iterator<String, String> input) {
+        assert compact != null;
+        assert compact.getOutfile() != null;
+        assert compact.getBuilder() != null;
+
+        long outputNumber = compact.currentOutput().getNumber();
+        assert outputNumber != 0;
+
+        // Check for iterator errors
+        Status status = input.status();
+        long currentEntries = compact.getBuilder().numEntries();
+        if (status.isOk()) {
+            status = compact.getBuilder().finish();
+        } else {
+            compact.getBuilder().abandon();
+        }
+
+        long currentBytes = compact.getBuilder().fileSize();
+        compact.currentOutput().setFileSize(currentBytes);
+        compact.addBytes(currentBytes);
+        compact.setBuilder(null);
+
+        // Finish and check for file errors
+        if (status.isOk()) {
+            status = compact.getOutfile().sync();
+        }
+
+        if (status.isOk()) {
+            status = compact.getOutfile().close();
+        }
+        compact.setOutfile(null);
+
+        if (status.isOk() && currentEntries > 0) {
+            // Verify that the table is usable
+            Iterator<String, String> iter = this.tableCache.iterator(new ReadOptions(), outputNumber, currentBytes).getKey();
+            status = iter.status();
+            if (status.isOk()) {
+                Options.Logger.log(options.getInfoLog(), String.format("Generated table #%d@%d: %d keys, %d bytes",
+                        outputNumber, compact.getCompaction().getLevel(), currentEntries, currentBytes));
+            }
+        }
+
+        return status;
+    }
+
     void cleanupCompaction(CompactionState compactionState) {
         assert this.mutex.isHeldByCurrentThread();
 
