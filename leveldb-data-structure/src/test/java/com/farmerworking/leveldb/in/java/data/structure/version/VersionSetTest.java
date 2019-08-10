@@ -14,6 +14,7 @@ import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
 import com.farmerworking.leveldb.in.java.data.structure.table.ITableBuilder;
 import com.farmerworking.leveldb.in.java.data.structure.table.ITableReader;
+import com.farmerworking.leveldb.in.java.data.structure.utils.ConsoleLogger;
 import com.farmerworking.leveldb.in.java.file.Env;
 import com.farmerworking.leveldb.in.java.file.FileName;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
@@ -106,15 +107,7 @@ public class VersionSetTest {
     public void testSetupOtherInputs() {
         int level = 0;
         Options options = new Options();
-        options.setInfoLog(new Options.Logger() {
-            @Override
-            public void log(String msg, String... args) {
-                System.out.println(msg);
-                for(String arg : args) {
-                    System.out.println(arg);
-                }
-            }
-        });
+        options.setInfoLog(new ConsoleLogger());
 
         VersionSet versionSet = new VersionSet("test", options, null, new InternalKeyComparator(new BytewiseComparator()));
 
