@@ -603,6 +603,44 @@ public class DBImpl implements DB {
         return this.versions.logAndApply(edit, this.mutex);
     }
 
+
+    boolean isEntryDroppable(CompactionState compact, IterateInputState state, Pair<Boolean, InternalKey> pair) {
+        boolean drop = false;
+
+        if (!pair.getKey()) {
+            // Do not hide error keys
+            state.currentUserKey = null;
+            state.hasCurrentUserKey = false;
+            state.lastSequenceForKey = InternalKey.kMaxSequenceNumber;
+        } else {
+            if (!state.hasCurrentUserKey || this.internalKeyComparator.getUserComparator().compare(pair.getValue().userKeyChar, state.currentUserKey.toCharArray()) != 0) {
+                // First occurrence of this user key
+                state.currentUserKey = pair.getValue().userKey;
+                state.hasCurrentUserKey = true;
+                state.lastSequenceForKey = InternalKey.kMaxSequenceNumber;
+            }
+
+            if (state.lastSequenceForKey <= compact.getSmallestSnapshot()) {
+                // Hidden by an newer entry for same user key
+                drop = true;    // (A)
+            } else if (pair.getValue().type.equals(ValueType.kTypeDeletion) &&
+                    pair.getValue().sequence <= compact.getSmallestSnapshot() &&
+                    compact.getCompaction().isBaseLevelForKey(pair.getValue().userKey)) {
+                // For this user key:
+                // (1) there is no data in higher levels
+                // (2) data in lower levels will have larger sequence numbers
+                // (3) data in layers that are being compacted here and have
+                //     smaller sequence numbers will be dropped in the next
+                //     few iterations of this loop (by rule (A) above).
+                // Therefore this deletion marker is obsolete and can be dropped.
+                drop = true;
+            }
+
+            state.lastSequenceForKey = pair.getValue().sequence;
+        }
+        return drop;
+    }
+
     Status installCompactionResults(CompactionState compact) {
         assert this.mutex.isHeldByCurrentThread();
         Options.Logger.log(options.getInfoLog(), String.format("Compacted %d@%d + %d@%d files => %d bytes",

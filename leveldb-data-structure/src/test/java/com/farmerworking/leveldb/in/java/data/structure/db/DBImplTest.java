@@ -1555,4 +1555,74 @@ public class DBImplTest {
         assertEquals(before + builder.fileSize(), compact.getTotalBytes());
         verify(builder, times(1)).finish();
     }
+
+    @Test
+    public void testIsEntryDroppableInternalKeyParseError() {
+        DBImpl.IterateInputState state = new DBImpl.IterateInputState();
+        state.currentUserKey = "";
+        state.hasCurrentUserKey = true;
+        state.lastSequenceForKey = 1L;
+
+        boolean result = db.isEntryDroppable(null, state, new Pair<>(false, null));
+        assertFalse(result);
+        assertEquals(new DBImpl.IterateInputState(), state);
+    }
+
+    @Test
+    public void testIsEntryDroppable() {
+        DBImpl.IterateInputState state = new DBImpl.IterateInputState();
+
+        CompactionState compact = mock(CompactionState.class);
+        doReturn(100L).when(compact).getSmallestSnapshot();
+
+        Compaction compaction = mock(Compaction.class);
+        doReturn(compaction).when(compact).getCompaction();
+        doReturn(false).when(compaction).isBaseLevelForKey("f");
+        doReturn(true).when(compaction).isBaseLevelForKey("g");
+
+        List<Pair<Boolean, InternalKey>> list = Lists.newArrayList(
+                new Pair<>(true, new InternalKey("a", 50L, ValueType.kTypeDeletion)),
+                new Pair<>(true, new InternalKey("b", 110L, ValueType.kTypeDeletion)),
+                new Pair<>(true, new InternalKey("c", 60L)),
+                new Pair<>(true, new InternalKey("d", 120L)),
+
+                new Pair<>(true, new InternalKey("e", 100L)),
+                new Pair<>(true, new InternalKey("e", 99L)),
+                new Pair<>(true, new InternalKey("e", 98L)),
+
+                new Pair<>(true, new InternalKey("f", 103L)),
+                new Pair<>(true, new InternalKey("f", 102L, ValueType.kTypeDeletion)),
+                new Pair<>(true, new InternalKey("f", 97L, ValueType.kTypeDeletion)),
+
+                new Pair<>(true, new InternalKey("g", 105L, ValueType.kTypeDeletion)),
+                new Pair<>(true, new InternalKey("g", 104L, ValueType.kTypeDeletion)),
+                new Pair<>(true, new InternalKey("g", 96L, ValueType.kTypeDeletion)),
+                new Pair<>(true, new InternalKey("g", 95L))
+        );
+
+        List<Boolean> result = Lists.newArrayList(
+                false,
+                false,
+                false,
+                false,
+
+                false,
+                true,
+                true,
+
+                false,
+                false,
+                false,
+
+                false,
+                false,
+                true,
+                true
+        );
+
+        for (int i = 0; i < list.size(); i++) {
+            boolean tmp = db.isEntryDroppable(compact, state, list.get(i));
+            assertEquals(result.get(i), tmp);
+        }
+    }
 }
