@@ -193,13 +193,14 @@ public abstract class EnvTest {
     public void testRenameFile() {
         Options options = new Options();
         String dbname = options.getEnv().getTestDirectory().getValue();
-        String filename1 = dbname + "/" + TestUtils.randomString(5);
+        String filename1 = dbname + "/" + TestUtils.randomA2Z(5);
         String filename2 = filename1 + "1";
 
         assertTrue(getImpl().delete(filename1).getKey().isOk());
         assertTrue(getImpl().delete(filename2).getKey().isOk());
 
-        assertTrue(getImpl().newWritableFile(filename1).getKey().isOk());
+        Status tmp = getImpl().newWritableFile(filename1).getKey();
+        assertTrue(tmp.getMessage(), tmp.isOk());
 
         Boolean exists = getImpl().isFileExists(filename1);
         assertTrue(exists);
