@@ -75,7 +75,6 @@ public class BlockBuilder implements IBlockBuilder {
         return this.buffer.length() == 0;
     }
 
-    @Override
     public int memoryUsage() {
         return (buffer.length() +                                                           // Raw data buffer
                 restartOffsets.size() * ICoding.getInstance().getFixed32Length() +          // Restart array

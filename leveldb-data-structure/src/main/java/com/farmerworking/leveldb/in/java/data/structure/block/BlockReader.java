@@ -49,7 +49,6 @@ public class BlockReader implements IBlockReader {
         }
     }
 
-    @Override
     public int memoryUsage() {
         return data.length;
     }

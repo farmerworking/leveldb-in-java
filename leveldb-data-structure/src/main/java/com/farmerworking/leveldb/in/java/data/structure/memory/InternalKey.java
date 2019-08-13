@@ -1,14 +1,13 @@
 package com.farmerworking.leveldb.in.java.data.structure.memory;
 
 import com.farmerworking.leveldb.in.java.common.ICoding;
-import com.farmerworking.leveldb.in.java.data.structure.skiplist.Sizable;
 import javafx.util.Pair;
 
 import java.util.Arrays;
 
 import static com.farmerworking.leveldb.in.java.data.structure.memory.ValueType.kTypeValue;
 
-public class InternalKey implements Sizable {
+public class InternalKey {
     // We leave eight bits empty at the bottom so a type and sequence#
     // can be packed together into 64-bits.
     public static long kMaxSequenceNumber = (Long.MAX_VALUE >> 8) - 1;
@@ -79,11 +78,6 @@ public class InternalKey implements Sizable {
     @Override
     public int hashCode() {
         return Arrays.hashCode(rep);
-    }
-
-    @Override
-    public int memoryUsage() {
-        return this.rep.length;
     }
 
     public ParsedInternalKey convert() {
