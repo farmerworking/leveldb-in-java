@@ -405,7 +405,7 @@ public class VersionSet {
             for (int i = 0; i < current.files.get(level).size(); i++) {
                 FileMetaData metaData = current.files.get(level).get(i);
                 if (StringUtils.isEmpty(this.compactPointer[level]) ||
-                        this.internalKeyComparator.compare(metaData.getLargest(), InternalKey.decode(compactPointer[level])) > 0) {
+                        this.internalKeyComparator.compare(metaData.getLargest().getRep(), compactPointer[level].toCharArray()) > 0) {
                     compaction.inputs[0].add(metaData);
                     break;
                 }
@@ -612,7 +612,8 @@ public class VersionSet {
         // Save compaction pointers
         for (int level = 0; level < Config.kNumLevels; level++) {
             if (StringUtils.isNotEmpty(compactPointer[level])) {
-                InternalKey internalKey = InternalKey.decode(compactPointer[level]);
+                InternalKey internalKey = new InternalKey();
+                internalKey.decodeFrom(compactPointer[level]);
                 edit.addCompactPoint(level, internalKey);
             }
         }

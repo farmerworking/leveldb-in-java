@@ -105,7 +105,7 @@ public class MergingIteratorConstructor extends Constructor {
 
         @Override
         public int compare(String o1, String o2) {
-            return internalKeyComparator.compare(InternalKey.decode(o1), InternalKey.decode(o2));
+            return internalKeyComparator.compare(o1.toCharArray(), o2.toCharArray());
         }
     }
 

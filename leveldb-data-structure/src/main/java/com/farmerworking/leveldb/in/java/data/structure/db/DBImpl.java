@@ -409,7 +409,7 @@ public class DBImpl implements DB {
         metaData.setFileNumber(this.versions.newFileNumber());
 
         this.pendingOutputs.add(metaData.getFileNumber());
-        Iterator<InternalKey, String> iter = memtable.iterator();
+        Iterator<String, String> iter = memtable.iterator();
         Options.Logger.log(this.options.getInfoLog(), String.format("Level-0 table %d: started", metaData.getFileNumber()));
         Status status;
         {
@@ -425,8 +425,8 @@ public class DBImpl implements DB {
         // should not be added to the manifest.
         int level = 0;
         if (status.isOk() && metaData.getFileSize() > 0) {
-            String minUserKey = metaData.getSmallest().userKey;
-            String maxUserKey = metaData.getLargest().userKey;
+            String minUserKey = metaData.getSmallest().userKey();
+            String maxUserKey = metaData.getLargest().userKey();
 
             if (base != null) {
                 level = base.pickLevelForMemTableOutput(minUserKey, maxUserKey);
@@ -604,7 +604,7 @@ public class DBImpl implements DB {
     }
 
 
-    boolean isEntryDroppable(CompactionState compact, IterateInputState state, Pair<Boolean, InternalKey> pair) {
+    boolean isEntryDroppable(CompactionState compact, IterateInputState state, Pair<Boolean, ParsedInternalKey> pair) {
         boolean drop = false;
 
         if (!pair.getKey()) {
@@ -613,9 +613,9 @@ public class DBImpl implements DB {
             state.hasCurrentUserKey = false;
             state.lastSequenceForKey = InternalKey.kMaxSequenceNumber;
         } else {
-            if (!state.hasCurrentUserKey || this.internalKeyComparator.getUserComparator().compare(pair.getValue().userKeyChar, state.currentUserKey.toCharArray()) != 0) {
+            if (!state.hasCurrentUserKey || this.internalKeyComparator.getUserComparator().compare(pair.getValue().getUserKeyChar(), state.currentUserKey.toCharArray()) != 0) {
                 // First occurrence of this user key
-                state.currentUserKey = pair.getValue().userKey;
+                state.currentUserKey = pair.getValue().getUserKey();
                 state.hasCurrentUserKey = true;
                 state.lastSequenceForKey = InternalKey.kMaxSequenceNumber;
             }
@@ -623,9 +623,9 @@ public class DBImpl implements DB {
             if (state.lastSequenceForKey <= compact.getSmallestSnapshot()) {
                 // Hidden by an newer entry for same user key
                 drop = true;    // (A)
-            } else if (pair.getValue().type.equals(ValueType.kTypeDeletion) &&
-                    pair.getValue().sequence <= compact.getSmallestSnapshot() &&
-                    compact.getCompaction().isBaseLevelForKey(pair.getValue().userKey)) {
+            } else if (pair.getValue().getValueType().equals(ValueType.kTypeDeletion) &&
+                    pair.getValue().getSequence() <= compact.getSmallestSnapshot() &&
+                    compact.getCompaction().isBaseLevelForKey(pair.getValue().getUserKey())) {
                 // For this user key:
                 // (1) there is no data in higher levels
                 // (2) data in lower levels will have larger sequence numbers
@@ -636,7 +636,7 @@ public class DBImpl implements DB {
                 drop = true;
             }
 
-            state.lastSequenceForKey = pair.getValue().sequence;
+            state.lastSequenceForKey = pair.getValue().getSequence();
         }
         return drop;
     }

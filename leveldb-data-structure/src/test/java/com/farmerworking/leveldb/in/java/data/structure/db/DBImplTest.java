@@ -321,13 +321,13 @@ public class DBImplTest {
                 metaData.getFileNumber(),
                 metaData.getFileSize()).getKey();
 
-        Iterator<InternalKey, String> iter2 = memtable.iterator();
+        Iterator<String, String> iter2 = memtable.iterator();
         iter1.seekToFirst();
         iter2.seekToFirst();
         assertTrue(iter1.valid() && iter2.valid());
 
         while(iter1.valid() && iter2.valid()) {
-            assertEquals(iter1.key(), iter2.key().encode());
+            assertEquals(iter1.key(), iter2.key());
             assertEquals(iter1.value(), iter2.value());
             iter1.next();
             iter2.next();
@@ -1585,24 +1585,24 @@ public class DBImplTest {
         doReturn(false).when(compaction).isBaseLevelForKey("f");
         doReturn(true).when(compaction).isBaseLevelForKey("g");
 
-        List<Pair<Boolean, InternalKey>> list = Lists.newArrayList(
-                new Pair<>(true, new InternalKey("a", 50L, ValueType.kTypeDeletion)),
-                new Pair<>(true, new InternalKey("b", 110L, ValueType.kTypeDeletion)),
-                new Pair<>(true, new InternalKey("c", 60L)),
-                new Pair<>(true, new InternalKey("d", 120L)),
+        List<Pair<Boolean, ParsedInternalKey>> list = Lists.newArrayList(
+                new Pair<>(true, new InternalKey("a", 50L, ValueType.kTypeDeletion).convert()),
+                new Pair<>(true, new InternalKey("b", 110L, ValueType.kTypeDeletion).convert()),
+                new Pair<>(true, new InternalKey("c", 60L).convert()),
+                new Pair<>(true, new InternalKey("d", 120L).convert()),
 
-                new Pair<>(true, new InternalKey("e", 100L)),
-                new Pair<>(true, new InternalKey("e", 99L)),
-                new Pair<>(true, new InternalKey("e", 98L)),
+                new Pair<>(true, new InternalKey("e", 100L).convert()),
+                new Pair<>(true, new InternalKey("e", 99L).convert()),
+                new Pair<>(true, new InternalKey("e", 98L).convert()),
 
-                new Pair<>(true, new InternalKey("f", 103L)),
-                new Pair<>(true, new InternalKey("f", 102L, ValueType.kTypeDeletion)),
-                new Pair<>(true, new InternalKey("f", 97L, ValueType.kTypeDeletion)),
+                new Pair<>(true, new InternalKey("f", 103L).convert()),
+                new Pair<>(true, new InternalKey("f", 102L, ValueType.kTypeDeletion).convert()),
+                new Pair<>(true, new InternalKey("f", 97L, ValueType.kTypeDeletion).convert()),
 
-                new Pair<>(true, new InternalKey("g", 105L, ValueType.kTypeDeletion)),
-                new Pair<>(true, new InternalKey("g", 104L, ValueType.kTypeDeletion)),
-                new Pair<>(true, new InternalKey("g", 96L, ValueType.kTypeDeletion)),
-                new Pair<>(true, new InternalKey("g", 95L))
+                new Pair<>(true, new InternalKey("g", 105L, ValueType.kTypeDeletion).convert()),
+                new Pair<>(true, new InternalKey("g", 104L, ValueType.kTypeDeletion).convert()),
+                new Pair<>(true, new InternalKey("g", 96L, ValueType.kTypeDeletion).convert()),
+                new Pair<>(true, new InternalKey("g", 95L).convert())
         );
 
         List<Boolean> result = Lists.newArrayList(

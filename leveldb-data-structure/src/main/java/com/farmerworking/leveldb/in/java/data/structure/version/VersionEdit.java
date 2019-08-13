@@ -200,7 +200,8 @@ public class VersionEdit {
 
                     Pair<String, Integer> abc = coding.getLengthPrefixedString(buffer, offset);
                     assert abc != null;
-                    key = InternalKey.decode(abc.getKey());
+                    key = new InternalKey();
+                    key.decodeFrom(abc.getKey());
                     offset = abc.getValue();
                     addCompactPoint(level, key);
                 } catch (AssertionError e) {
@@ -239,12 +240,14 @@ public class VersionEdit {
 
                     Pair<String, Integer> def = coding.getLengthPrefixedString(buffer, offset);
                     assert def != null;
-                    InternalKey smallest = InternalKey.decode(def.getKey());
+                    InternalKey smallest = new InternalKey();
+                    smallest.decodeFrom(def.getKey());
                     offset = def.getValue();
 
                     def = coding.getLengthPrefixedString(buffer, offset);
                     assert def != null;
-                    InternalKey largest = InternalKey.decode(def.getKey());
+                    InternalKey largest = new InternalKey();
+                    largest.decodeFrom(def.getKey());
                     offset = def.getValue();
 
                     newFiles.add(new Pair<>(level, new FileMetaData(fileNumber, fileSize, smallest, largest)));

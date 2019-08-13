@@ -111,7 +111,7 @@ public class Version {
                 lastFileRead = fileMetaData;
                 lastFileReadLevel = level;
 
-                GetSaver saver = newGetSaver(internalKey.userKey);
+                GetSaver saver = newGetSaver(internalKey.userKey());
                 Status status = tableCache.get(
                         options,
                         fileMetaData.getFileNumber(),
@@ -129,7 +129,7 @@ public class Version {
                     } else if (saver.getState().equals(GetState.kDeleted)) {
                         return new Pair<>(Status.NotFound(""), null);
                     } else if (saver.getState().equals(GetState.kCorrupt)) {
-                        return new Pair<>(Status.Corruption("corrupted key for " + internalKey.userKey), null);
+                        return new Pair<>(Status.Corruption("corrupted key for " + internalKey.userKey()), null);
                     }
                 }
             }
@@ -262,20 +262,20 @@ public class Version {
 
         char[] userBegin = null, userEnd = null;
         if (begin != null) {
-            userBegin = begin.userKeyChar;
+            userBegin = begin.userKey().toCharArray();
         }
 
         if (end != null) {
-            userEnd = end.userKeyChar;
+            userEnd = end.userKey().toCharArray();
         }
 
         Vector<FileMetaData> result = new Vector<>();
         Comparator comparator = this.internalKeyComparator.getUserComparator();
         for(int i = 0; i < this.files.get(level).size(); ) {
             FileMetaData metaData = this.files.get(level).get(i++);
-            if (begin != null && comparator.compare(metaData.getLargest().userKeyChar, userBegin) < 0) {
+            if (begin != null && comparator.compare(metaData.getLargest().userKey().toCharArray(), userBegin) < 0) {
                 // completely before specified range; skip it
-            } else if (end != null && comparator.compare(metaData.getSmallest().userKeyChar, userEnd) > 0) {
+            } else if (end != null && comparator.compare(metaData.getSmallest().userKey().toCharArray(), userEnd) > 0) {
                 // completely after specified range; skip it
             } else {
                 result.add(metaData);
@@ -283,12 +283,12 @@ public class Version {
                 if (level == 0) {
                     // Level-0 files may overlap each other.  So check if the newly
                     // added file has expanded the range.  If so, restart search.
-                    if (begin != null && comparator.compare(metaData.getSmallest().userKeyChar, userBegin) < 0) {
-                        userBegin = metaData.getSmallest().userKeyChar;
+                    if (begin != null && comparator.compare(metaData.getSmallest().userKey().toCharArray(), userBegin) < 0) {
+                        userBegin = metaData.getSmallest().userKey().toCharArray();
                         result.clear();
                         i = 0;
-                    } else if (end != null && comparator.compare(metaData.getLargest().userKeyChar, userEnd) > 0) {
-                        userEnd = metaData.getLargest().userKeyChar;
+                    } else if (end != null && comparator.compare(metaData.getLargest().userKey().toCharArray(), userEnd) > 0) {
+                        userEnd = metaData.getLargest().userKey().toCharArray();
                         result.clear();
                         i = 0;
                     }

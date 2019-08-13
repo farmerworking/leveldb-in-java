@@ -20,12 +20,11 @@ public class FileRangeHelper {
     public int findFile(InternalKeyComparator comparator, Vector<FileMetaData> files, String key) {
         int left = 0;
         int right = files.size();
-        InternalKey internalKey = InternalKey.decode(key);
         while(left < right) {
             int middle = (left + right) / 2;
             FileMetaData metaData = files.get(middle);
 
-            if (comparator.compare(metaData.getLargest(), internalKey) < 0) {
+            if (comparator.compare(metaData.getLargest().getRep(), key.toCharArray()) < 0) {
                 left = middle + 1;
             } else {
                 right = middle;
@@ -79,12 +78,12 @@ public class FileRangeHelper {
     private boolean beforeFile(Comparator userComparator, String userKey, FileMetaData metaData) {
         return (userKey != null && userComparator.compare(
                 userKey.toCharArray(),
-                metaData.getSmallest().userKey.toCharArray()) < 0);
+                metaData.getSmallest().userKey().toCharArray()) < 0);
     }
 
     private boolean afterFile(Comparator userComparator, String userKey, FileMetaData metaData) {
         return (userKey != null && userComparator.compare(
                 userKey.toCharArray(),
-                metaData.getLargest().userKey.toCharArray()) > 0);
+                metaData.getLargest().userKey().toCharArray()) > 0);
     }
 }

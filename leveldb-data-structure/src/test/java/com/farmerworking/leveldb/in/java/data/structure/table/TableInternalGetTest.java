@@ -42,11 +42,11 @@ public abstract class TableInternalGetTest {
         ITableReader tableReader = constructor.getItableReader();
         ReadOptions readOptions = new ReadOptions();
         for(InternalKey key : internalKeys) {
-            GetSaver saver = new GetSaver(key.userKey, userComparator);
+            GetSaver saver = new GetSaver(key.userKey(), userComparator);
             Status status = tableReader.internalGet(readOptions, key.encode(), saver);
             assertTrue(status.isOk());
             assertEquals(GetState.kFound, saver.getState());
-            assertEquals(key.userKey, saver.getUserKey());
+            assertEquals(key.userKey(), saver.getUserKey());
             assertEquals(data.get(key.encode()), saver.getValue());
         }
     }
@@ -108,11 +108,11 @@ public abstract class TableInternalGetTest {
         ITableReader tableReader = constructor.getItableReader();
         ReadOptions readOptions = new ReadOptions();
         for(InternalKey key : internalKeys) {
-            GetSaver saver = new GetSaver(key.userKey, userComparator);
+            GetSaver saver = new GetSaver(key.userKey(), userComparator);
             Status status = tableReader.internalGet(readOptions, key.encode(), saver);
             assertTrue(status.isOk());
             assertEquals(GetState.kFound, saver.getState());
-            assertEquals(key.userKey, saver.getUserKey());
+            assertEquals(key.userKey(), saver.getUserKey());
             assertEquals(data.get(key.encode()), saver.getValue());
         }
 
@@ -143,11 +143,11 @@ public abstract class TableInternalGetTest {
         ITableReader tableReader = constructor.getItableReader();
         ReadOptions readOptions = new ReadOptions();
         for(InternalKey key : internalKeys) {
-            GetSaver saver = new GetSaver(key.userKey, userComparator);
+            GetSaver saver = new GetSaver(key.userKey(), userComparator);
             Status status = tableReader.internalGet(readOptions, key.encode(), saver);
             assertTrue(status.isOk());
             assertEquals(GetState.kFound, saver.getState());
-            assertEquals(key.userKey, saver.getUserKey());
+            assertEquals(key.userKey(), saver.getUserKey());
             assertEquals(data.get(key.encode()), saver.getValue());
         }
 
@@ -179,11 +179,11 @@ public abstract class TableInternalGetTest {
 
         ReadOptions readOptions = new ReadOptions();
         for(InternalKey key : internalKeys) {
-            GetSaver saver = new GetSaver(key.userKey, userComparator);
+            GetSaver saver = new GetSaver(key.userKey(), userComparator);
             Status status = tableReader.internalGet(readOptions, key.encode(), saver);
             assertTrue(status.isOk());
             assertEquals(GetState.kFound, saver.getState());
-            assertEquals(key.userKey, saver.getUserKey());
+            assertEquals(key.userKey(), saver.getUserKey());
             assertEquals(data.get(key.encode()), saver.getValue());
         }
 

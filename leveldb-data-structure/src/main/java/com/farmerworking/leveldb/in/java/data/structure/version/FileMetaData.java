@@ -11,8 +11,8 @@ public class FileMetaData {
     private int allowedSeeks = 1 << 30; // Seeks allowed until compaction
     private long fileNumber;
     private long fileSize = 0; // File size in bytes
-    private InternalKey smallest; // Smallest internal key served by table
-    private InternalKey largest;  // Largest internal key served by table
+    private InternalKey smallest = new InternalKey(); // Smallest internal key served by table
+    private InternalKey largest = new InternalKey();  // Largest internal key served by table
 
     public FileMetaData() {
     }

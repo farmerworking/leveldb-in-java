@@ -25,7 +25,7 @@ public class BuilderTest {
     Builder builder;
     Options options;
     String dbname;
-    Iterator<InternalKey, String> validIterator;
+    Iterator<String, String> validIterator;
     TableCache tableCache;
 
     @Before
@@ -35,7 +35,7 @@ public class BuilderTest {
         dbname = options.getEnv().getTestDirectory().getValue();
         tableCache = new TableCache(dbname, options, 1024);
 
-        validIterator = new Iterator<InternalKey, String>() {
+        validIterator = new Iterator<String, String>() {
             List<String> values = Lists.newArrayList("value1", "value2");
             List<InternalKey> keys = Lists.newArrayList(new InternalKey("a", 1L), new InternalKey("b", 2L));
 
@@ -76,8 +76,8 @@ public class BuilderTest {
             }
 
             @Override
-            public InternalKey key() {
-                return keys.get(index);
+            public String key() {
+                return keys.get(index).encode();
             }
 
             @Override

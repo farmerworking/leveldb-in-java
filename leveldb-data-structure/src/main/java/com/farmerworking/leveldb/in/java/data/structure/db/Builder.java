@@ -23,7 +23,7 @@ public class Builder {
                              Env env,
                              Options options,
                              TableCache tableCache,
-                             Iterator<InternalKey, String> iter,
+                             Iterator<String, String> iter,
                              FileMetaData metaData) {
         metaData.setFileSize(0);
         iter.seekToFirst();
@@ -38,10 +38,10 @@ public class Builder {
             }
 
             TableBuilder builder = new TableBuilder(options, pair.getValue());
-            metaData.setSmallest(iter.key());
+            metaData.getSmallest().decodeFrom(iter.key());
             for (; iter.valid(); iter.next()) {
-                metaData.setLargest(iter.key());
-                builder.add(iter.key().encode(), iter.value());
+                metaData.getLargest().decodeFrom(iter.key());
+                builder.add(iter.key(), iter.value());
             }
 
             if (status.isOk()) {

@@ -119,9 +119,9 @@ public class Compaction {
             Vector<FileMetaData> files = inputVersion.files.get(lvl);
             for (; this.levelPtrs[lvl] < files.size();) {
                 FileMetaData metaData = files.get(this.levelPtrs[lvl]);
-                if (userComparator.compare(userKeyChar, metaData.getLargest().userKeyChar) <= 0) {
+                if (userComparator.compare(userKeyChar, metaData.getLargest().userKey().toCharArray()) <= 0) {
                     // We've advanced far enough
-                    if (userComparator.compare(userKeyChar, metaData.getSmallest().userKeyChar) >= 0) {
+                    if (userComparator.compare(userKeyChar, metaData.getSmallest().userKey().toCharArray()) >= 0) {
                         // Key falls in this file's range, so definitely not base level
                         return false;
                     }
@@ -134,10 +134,10 @@ public class Compaction {
     }
 
     // Returns true iff we should stop building the current output before processing "internal_key".
-    public boolean shouldStopBefore(InternalKey internalKey) {
+    public boolean shouldStopBefore(String internalKey) {
         InternalKeyComparator comparator = inputVersion.internalKeyComparator;
         while(grandparentIndex < grandparents.size() &&
-                comparator.compare(internalKey, grandparents.get(grandparentIndex).getLargest()) > 0) {
+                comparator.compare(internalKey.toCharArray(), grandparents.get(grandparentIndex).getLargest().getRep()) > 0) {
             if (this.seenKey) {
                 this.overlappedBytes += grandparents.get(grandparentIndex).getFileSize();
             }

@@ -7,6 +7,7 @@ import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.data.structure.block.IBlockReader;
 import com.farmerworking.leveldb.in.java.data.structure.block.IFilterBlockReader;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
+import com.farmerworking.leveldb.in.java.data.structure.memory.ParsedInternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.ValueType;
 import com.farmerworking.leveldb.in.java.data.structure.two.level.iterator.TwoLevelIterator;
 import com.farmerworking.leveldb.in.java.file.RandomAccessFile;
@@ -126,16 +127,12 @@ public class TableReader implements ITableReader {
                 Iterator<String, String> blockIterator = indexTransfer.transfer(readOptions, indexIterator.value());
                 blockIterator.seek(internalKey);
                 if (blockIterator.valid()) {
-                    InternalKey parsed = null;
-                    try {
-                        parsed = InternalKey.decode(blockIterator.key());
-                    } catch (Throwable e) {
+                    Pair<Boolean, ParsedInternalKey> tmp = InternalKey.parseInternalKey(blockIterator.key());
+                    if (!tmp.getKey()) {
                         saver.setState(GetState.kCorrupt);
-                    }
-
-                    if (parsed != null) {
-                        if (saver.getUserComparator().compare(parsed.userKeyChar, saver.getUserKey().toCharArray()) == 0) {
-                            saver.setState(parsed.type == ValueType.kTypeValue ? GetState.kFound : GetState.kDeleted);
+                    } else {
+                        if (saver.getUserComparator().compare(tmp.getValue().getUserKeyChar(), saver.getUserKey().toCharArray()) == 0) {
+                            saver.setState(tmp.getValue().getValueType() == ValueType.kTypeValue ? GetState.kFound : GetState.kDeleted);
 
                             if (saver.getState() == GetState.kFound) {
                                 saver.setValue(blockIterator.value());

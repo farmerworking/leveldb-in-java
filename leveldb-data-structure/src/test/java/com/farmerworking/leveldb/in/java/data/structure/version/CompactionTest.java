@@ -185,26 +185,26 @@ public class CompactionTest {
         assertFalse(spyCompaction.seenKey);
         assertEquals(0, spyCompaction.overlappedBytes);
         assertEquals(0, spyCompaction.grandparentIndex);
-        assertFalse(spyCompaction.shouldStopBefore(new InternalKey("c", 3L, ValueType.kTypeValue)));
+        assertFalse(spyCompaction.shouldStopBefore(new InternalKey("c", 3L, ValueType.kTypeValue).encode()));
         assertTrue(spyCompaction.seenKey);
         assertEquals(0, spyCompaction.overlappedBytes);
         assertEquals(1, spyCompaction.grandparentIndex);
 
-        assertFalse(spyCompaction.shouldStopBefore(new InternalKey("c", 4L, ValueType.kTypeValue)));
+        assertFalse(spyCompaction.shouldStopBefore(new InternalKey("c", 4L, ValueType.kTypeValue).encode()));
         assertEquals(0, spyCompaction.overlappedBytes);
         assertEquals(1, spyCompaction.grandparentIndex);
 
-        assertFalse(spyCompaction.shouldStopBefore(new InternalKey("e", 5L, ValueType.kTypeValue)));
+        assertFalse(spyCompaction.shouldStopBefore(new InternalKey("e", 5L, ValueType.kTypeValue).encode()));
         assertEquals(10, spyCompaction.overlappedBytes);
         assertEquals(2, spyCompaction.grandparentIndex);
 
         // state not change if invoke multiple times
-        assertFalse(spyCompaction.shouldStopBefore(new InternalKey("e", 5L, ValueType.kTypeValue)));
+        assertFalse(spyCompaction.shouldStopBefore(new InternalKey("e", 5L, ValueType.kTypeValue).encode()));
         assertEquals(10, spyCompaction.overlappedBytes);
         assertEquals(2, spyCompaction.grandparentIndex);
 
         doReturn(9L).when(spyCompaction).maxGrandParentOverlapBytes();
-        assertTrue(spyCompaction.shouldStopBefore(new InternalKey("e", 5L, ValueType.kTypeValue)));
+        assertTrue(spyCompaction.shouldStopBefore(new InternalKey("e", 5L, ValueType.kTypeValue).encode()));
         assertEquals(0, spyCompaction.overlappedBytes);
         assertEquals(2, spyCompaction.grandparentIndex);
     }

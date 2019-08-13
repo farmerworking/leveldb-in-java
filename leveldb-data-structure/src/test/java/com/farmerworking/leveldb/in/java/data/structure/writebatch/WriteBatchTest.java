@@ -24,13 +24,14 @@ public class WriteBatchTest {
         MemTableInserter memTableInserter = new MemTableInserter(batch.getSequence(), mem);
         Status status = batch.iterate(memTableInserter);
         int count = 0;
-        Iterator<InternalKey, String> iter = mem.iterator();
+        Iterator<String, String> iter = mem.iterator();
+        InternalKey ikey = new InternalKey();
         for (iter.seekToFirst(); iter.valid(); iter.next()) {
-            InternalKey ikey = iter.key();
-            switch (ikey.type) {
+            ikey.decodeFrom(iter.key());
+            switch (ikey.type()) {
                 case kTypeValue:
                     state = state.concat("Put(");
-                    state = state.concat(ikey.userKey);
+                    state = state.concat(ikey.userKey());
                     state = state.concat(", ");
                     state = state.concat(iter.value());
                     state = state.concat(")");
@@ -38,13 +39,13 @@ public class WriteBatchTest {
                     break;
                 case kTypeDeletion:
                     state = state.concat("Delete(");
-                    state = state.concat(ikey.userKey);
+                    state = state.concat(ikey.userKey());
                     state = state.concat(")");
                     count++;
                     break;
             }
             state = state.concat("@");
-            state = state.concat(String.valueOf(ikey.sequence));
+            state = state.concat(String.valueOf(ikey.sequence()));
         }
         if (!status.isOk()) {
             state = state.concat("ParseError()");
