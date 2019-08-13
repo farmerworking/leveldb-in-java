@@ -7,8 +7,8 @@ import lombok.Data;
 public class Output {
     private long number;
     private long fileSize;
-    private InternalKey smallest;
-    private InternalKey largest;
+    private InternalKey smallest = new InternalKey();
+    private InternalKey largest = new InternalKey();
 
     public Output(long number) {
         this.number = number;

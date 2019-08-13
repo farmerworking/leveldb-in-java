@@ -1360,8 +1360,8 @@ public class DBImplTest {
         assertEquals(1, compact.getOutputs().size());
         Output output = compact.getOutputs().get(0);
         assertEquals(fileNumber, output.getNumber());
-        assertNull(output.getSmallest());
-        assertNull(output.getLargest());
+        assertNotNull(output.getSmallest());
+        assertNotNull(output.getLargest());
         assertTrue(options.getEnv().isFileExists(FileName.tableFileName(dbname, fileNumber)));
         assertNotNull(compact.getBuilder());
         assertNotNull(compact.getOutfile());
