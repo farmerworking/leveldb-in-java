@@ -1264,11 +1264,14 @@ public class DBImplTest {
         spyDB.setBgCompactionScheduled(true);
 
         AtomicBoolean signal = new AtomicBoolean(false);
+        AtomicBoolean goon = new AtomicBoolean(false);
+
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
                     spyDB.getMutex().lock();
+                    goon.set(true);
                     spyDB.getBgCondition().await();
                     signal.set(true);
                 } catch (InterruptedException e) {
@@ -1278,9 +1281,11 @@ public class DBImplTest {
                 }
             }
         }).start();
-        Thread.sleep(1000);
+
+        while(!goon.get()) {}
 
         assertTrue(spyDB.backgroundCall());
+        Thread.sleep(200);
         assertFalse(spyDB.isBgCompactionScheduled());
         assertTrue(signal.get());
         verify(spyDB, times(1)).maybeScheduleCompaction();
