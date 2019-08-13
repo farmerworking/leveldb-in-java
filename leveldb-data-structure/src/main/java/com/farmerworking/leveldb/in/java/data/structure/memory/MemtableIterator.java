@@ -1,14 +1,18 @@
 package com.farmerworking.leveldb.in.java.data.structure.memory;
 
 import com.farmerworking.leveldb.in.java.api.Status;
+import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.data.structure.iterator.AbstractIterator;
 import com.farmerworking.leveldb.in.java.data.structure.skiplist.ISkipList;
 import com.farmerworking.leveldb.in.java.data.structure.skiplist.ISkipListIterator;
+import javafx.util.Pair;
 
-public class MemtableIterator extends AbstractIterator<InternalKey, String> {
-    private ISkipListIterator<MemtableEntry> iter;
+public class MemtableIterator extends AbstractIterator<String, String> {
+    private static ICoding coding = ICoding.getInstance();
 
-    public MemtableIterator(ISkipList<MemtableEntry> skipList) {
+    private ISkipListIterator<char[]> iter;
+
+    public MemtableIterator(ISkipList<char[]> skipList) {
         this.iter = skipList.iterator();
     }
 
@@ -33,8 +37,10 @@ public class MemtableIterator extends AbstractIterator<InternalKey, String> {
     @Override
     public void seek(String target) {
         assert !this.closed;
-        MemtableEntry seek = new MemtableEntry(InternalKey.kMaxSequenceNumber, ValueType.kTypeValue, target, null);
-        iter.seek(seek);
+        char[] buffer = new char[coding.varintLength(target.length()) + target.length()];
+        int offset = coding.encodeVarint32(buffer, 0, target.length());
+        System.arraycopy(target.toCharArray(), 0, buffer, offset, target.length());
+        iter.seek(buffer);
     }
 
     @Override
@@ -50,15 +56,19 @@ public class MemtableIterator extends AbstractIterator<InternalKey, String> {
     }
 
     @Override
-    public InternalKey key() {
+    public String key() {
         assert !this.closed;
-        return iter.key().internalKey;
+        Pair<String, Integer> tmp = coding.getLengthPrefixedString(iter.key(), 0);
+        return tmp.getKey();
     }
 
     @Override
     public String value() {
         assert !this.closed;
-        return iter.key().value;
+        char[] buffer = iter.key();
+        Pair<String, Integer> tmp = coding.getLengthPrefixedString(buffer, 0);
+        tmp = coding.getLengthPrefixedString(buffer, tmp.getValue());
+        return tmp.getKey();
     }
 
     @Override

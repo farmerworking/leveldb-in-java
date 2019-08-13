@@ -2,13 +2,18 @@ package com.farmerworking.leveldb.in.java.data.structure.memory;
 
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.api.Iterator;
+import com.farmerworking.leveldb.in.java.common.ICoding;
 import com.farmerworking.leveldb.in.java.data.structure.skiplist.ISkipList;
 import com.farmerworking.leveldb.in.java.data.structure.skiplist.ISkipListIterator;
 import com.farmerworking.leveldb.in.java.data.structure.skiplist.JDKSkipList;
 import javafx.util.Pair;
 
+import java.util.Arrays;
+
 public class Memtable implements IMemtable {
-    private ISkipList<MemtableEntry> table;
+    private static ICoding coding = ICoding.getInstance();
+
+    private ISkipList<char[]> table;
     private MemtableEntryComparator comparator;
 
     public Memtable(InternalKeyComparator comparator) {
@@ -23,24 +28,45 @@ public class Memtable implements IMemtable {
 
     @Override
     public void add(long sequence, ValueType type, String key, String value) {
-        table.insert(new MemtableEntry(sequence, type, key, value));
+        int keySize = key.length();
+        int valueSize = value.length();
+        int internalKeySize = keySize + coding.getFixed64Length();
+        int encodedSize = coding.varintLength(internalKeySize) + internalKeySize + coding.varintLength(valueSize) + valueSize;
+
+        char[] buffer = new char[encodedSize];
+        int offset = 0;
+        offset = coding.encodeVarint32(buffer, offset, internalKeySize);
+        System.arraycopy(key.toCharArray(), 0, buffer, offset, key.length());
+        offset += key.length();
+        coding.encodeFixed64(buffer, offset, InternalKey.packSequenceAndType(sequence, type));
+        offset += coding.getFixed64Length();
+        offset += coding.encodeVarint32(buffer, offset, valueSize);
+        System.arraycopy(value.toCharArray(), 0, buffer, offset, value.length());
+        offset += value.length();
+        assert offset == encodedSize;
+        table.insert(buffer);
     }
 
     @Override
     public Pair<Boolean, Pair<Status, String>> get(String userKey, long sequence) {
-        ISkipListIterator<MemtableEntry> iter = table.iterator();
-        MemtableEntry seek = new MemtableEntry(sequence, ValueType.kTypeValue, userKey, null);
-        iter.seek(seek);
+        ISkipListIterator<char[]> iter = table.iterator();
+        iter.seek(seekKey(userKey, sequence));
 
         if (iter.valid()) {
             // Check that it belongs to same user key.  We do not check the
             // sequence number since the Seek() call above should have skipped
             // all entries with overly large sequence numbers.
-            MemtableEntry entry = iter.key();
+            char[] entry = iter.key();
+            Pair<Integer, Integer> pair = coding.decodeVarint32(entry, 0);
+            Integer userKeyStartOffset = pair.getValue();
+            Integer userKeyLength = pair.getKey();
 
-            if (comparator.comparator.userComparator.compare(entry.internalKey.userKeyChar, userKey.toCharArray()) == 0) {
-                if (entry.internalKey.type == ValueType.kTypeValue) {
-                    return new Pair<>(true, new Pair<>(Status.OK(), entry.value));
+            if (comparator.comparator.userComparator.compare(Arrays.copyOfRange(entry, userKeyStartOffset, userKeyStartOffset + userKeyLength - coding.getFixed64Length()), userKey.toCharArray()) == 0) {
+                long tag = coding.decodeFixed64(entry, userKeyStartOffset + userKeyLength - coding.getFixed64Length());
+                ValueType type = ValueType.valueOf((int) tag & 0xff);
+                if (type == ValueType.kTypeValue) {
+                    Pair<String, Integer> tmp = coding.getLengthPrefixedString(entry, userKeyStartOffset + userKeyLength);
+                    return new Pair<>(true, new Pair<>(Status.OK(), tmp.getKey()));
                 } else {
                     return new Pair<>(true, new Pair<>(Status.NotFound(""), ""));
                 }
@@ -50,6 +76,18 @@ public class Memtable implements IMemtable {
         } else {
             return new Pair<>(false, null);
         }
+    }
+
+    private char[] seekKey(String userKey, long sequence) {
+        int internalKeySize = userKey.length() + coding.getFixed64Length();
+        int encodedSize = coding.varintLength(internalKeySize) + internalKeySize;
+        char[] buffer = new char[encodedSize];
+        int offset = 0;
+        offset = coding.encodeVarint32(buffer, offset, internalKeySize);
+        System.arraycopy(userKey.toCharArray(), 0, buffer, offset, userKey.length());
+        offset += userKey.length();
+        coding.encodeFixed64(buffer, offset, InternalKey.packSequenceAndType(sequence, ValueType.kValueTypeForSeek));
+        return buffer;
     }
 
     @Override

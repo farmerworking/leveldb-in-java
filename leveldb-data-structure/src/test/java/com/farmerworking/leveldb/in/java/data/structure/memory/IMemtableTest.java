@@ -98,18 +98,18 @@ public abstract class IMemtableTest {
             memtable.add(1L, ValueType.kTypeValue, i + "", values[i]);
         }
 
-        Iterator<InternalKey, String> iter = memtable.iterator();
+        Iterator<String, String> iter = memtable.iterator();
         iter.seekToFirst();
         assertTrue(iter.valid());
 
         for (int i = 0; i < values.length; i++) {
-            assertEquals(String.valueOf(i), iter.key().userKey);
+            assertEquals(String.valueOf(i), InternalKey.extractUserKey(iter.key()));
             assertEquals(values[i], iter.value());
             iter.next();
         }
         assertFalse(iter.valid());
 
-        iter.seek("1");
+        iter.seek(new InternalKey("1", 1L, ValueType.kTypeValue).encode());
         assertTrue(iter.valid());
         assertEquals("2", iter.value());
 
@@ -136,10 +136,10 @@ public abstract class IMemtableTest {
         Status status = batch.iterate(memTableInserter);
         assertTrue(status.isOk());
 
-        Iterator<InternalKey, String> iter = memtable.iterator();
+        Iterator<String, String> iter = memtable.iterator();
         iter.seekToFirst();
         while (iter.valid()) {
-            System.out.println(String.format("key: '%s' -> '%s'", iter.key().userKey, iter.value()));
+            System.out.println(String.format("key: '%s' -> '%s'", InternalKey.extractUserKey(iter.key()), iter.value()));
             iter.next();
         }
     }
