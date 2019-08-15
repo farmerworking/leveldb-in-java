@@ -1677,4 +1677,25 @@ public class DBImplTest {
         assertTrue(signal.get());
         assertTrue(cost >= 10);
     }
+
+    @Test
+    public void testStopDuringIterateCompactionInput() {
+        CompactionState compact = mock(CompactionState.class);
+        Compaction compaction = mock(Compaction.class);
+        doReturn(true).when(compaction).shouldStopBefore(anyString());
+        doReturn(compaction).when(compact).getCompaction();
+        doReturn(mock(TableBuilder.class)).when(compact).getBuilder();
+
+        boolean result = spyDB.stopDuringIterateCompactionInput(compact, "");
+        assertTrue(result);
+
+        doReturn(null).when(compact).getBuilder();
+        result = spyDB.stopDuringIterateCompactionInput(compact, null);
+        assertFalse(result);
+        doReturn(mock(TableBuilder.class)).when(compact).getBuilder();
+
+        doReturn(false).when(compaction).shouldStopBefore(anyString());
+        result = spyDB.stopDuringIterateCompactionInput(compact, null);
+        assertFalse(result);
+    }
 }

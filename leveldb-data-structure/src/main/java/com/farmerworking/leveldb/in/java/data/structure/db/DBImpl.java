@@ -604,6 +604,10 @@ public class DBImpl implements DB {
     }
 
 
+    boolean stopDuringIterateCompactionInput(CompactionState compact, String key) {
+        return compact.getCompaction().shouldStopBefore(key) && compact.getBuilder() != null;
+    }
+
     // used during disk file compaction
     long compactMemtableFirst() {
         if (this.hasImmutableMemtable.get()) {
