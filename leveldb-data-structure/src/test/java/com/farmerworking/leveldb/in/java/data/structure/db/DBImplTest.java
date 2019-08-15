@@ -1630,4 +1630,51 @@ public class DBImplTest {
             assertEquals(result.get(i), tmp);
         }
     }
+
+    @Test
+    public void testCompactMemtableFirst() throws InterruptedException {
+        assertFalse(db.getHasImmutableMemtable().get());
+        long cost = db.compactMemtableFirst();
+        assertEquals(0, cost);
+
+        spyDB.getHasImmutableMemtable().set(true);
+        spyDB.setImmutableMemtable(mock(IMemtable.class));
+        AtomicBoolean signal = new AtomicBoolean(false);
+        AtomicBoolean goon = new AtomicBoolean(false);
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                assertTrue(spyDB.getMutex().isHeldByCurrentThread());
+                Thread.sleep(10);
+                return null;
+            }
+        }).when(spyDB).compactMemtable();
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    spyDB.getMutex().lock();
+                    goon.set(true);
+                    spyDB.getBgCondition().await();
+                    signal.set(true);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } finally {
+                    spyDB.getMutex().unlock();
+                }
+            }
+        }).start();
+
+        while(!goon.get()) {}
+
+        cost = spyDB.compactMemtableFirst();
+
+        Thread.sleep(100);
+        System.out.println(cost);
+        verify(spyDB, times(1)).compactMemtable();
+        assertFalse(spyDB.getMutex().isHeldByCurrentThread());
+        assertTrue(signal.get());
+        assertTrue(cost >= 10);
+    }
 }

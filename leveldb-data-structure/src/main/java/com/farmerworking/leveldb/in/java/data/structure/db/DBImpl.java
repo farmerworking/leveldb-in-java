@@ -604,6 +604,25 @@ public class DBImpl implements DB {
     }
 
 
+    // used during disk file compaction
+    long compactMemtableFirst() {
+        if (this.hasImmutableMemtable.get()) {
+            long immutableMemtableStart = System.currentTimeMillis();
+            try {
+                this.mutex.lock();
+                if (this.immutableMemtable != null) {
+                    this.compactMemtable();
+                    bgCondition.signalAll();
+                }
+            } finally {
+                this.mutex.unlock();
+            }
+            return System.currentTimeMillis() - immutableMemtableStart;
+        } else {
+            return 0;
+        }
+    }
+
     boolean isEntryDroppable(CompactionState compact, IterateInputState state, Pair<Boolean, ParsedInternalKey> pair) {
         boolean drop = false;
 
