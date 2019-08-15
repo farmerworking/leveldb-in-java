@@ -604,8 +604,83 @@ public class DBImpl implements DB {
     }
 
 
+    static class IterateInputState {
+        String currentUserKey = null;
+        boolean hasCurrentUserKey = false;
+        long lastSequenceForKey = InternalKey.kMaxSequenceNumber;
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            IterateInputState that = (IterateInputState) o;
+            return hasCurrentUserKey == that.hasCurrentUserKey &&
+                    lastSequenceForKey == that.lastSequenceForKey &&
+                    Objects.equals(currentUserKey, that.currentUserKey);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(currentUserKey, hasCurrentUserKey, lastSequenceForKey);
+        }
+    }
+
     boolean stopDuringIterateCompactionInput(CompactionState compact, String key) {
         return compact.getCompaction().shouldStopBefore(key) && compact.getBuilder() != null;
+    }
+
+    Pair<Status, Long> iterateInput(Iterator<String, String> input, CompactionState compact) {
+        long immutableMemtableMicros = 0;
+        Status status = Status.OK();
+
+        IterateInputState state = new IterateInputState();
+        for (input.seekToFirst(); input.valid() && !this.shuttingDown.get(); input.next()) {
+            // Prioritize immutable compaction work
+            immutableMemtableMicros += compactMemtableFirst();
+
+            String key = input.key();
+            // avoid too much overlap
+            if (stopDuringIterateCompactionInput(compact, key)) {
+                status = finishCompactionOutputFile(compact, input);
+                if (status.isNotOk()) {
+                    break;
+                }
+            }
+
+            // Handle key/value, add to state, etc.
+            Pair<Boolean, ParsedInternalKey> pair = InternalKey.parseInternalKey(key);
+            boolean drop = isEntryDroppable(compact, state, pair);
+
+            if (!drop) {
+                // Open output file if necessary
+                if (compact.getBuilder() == null) {
+                    status = openCompactionOutputFile(compact);
+                    if (status.isNotOk()) {
+                        break;
+                    }
+                }
+
+                if (compact.getBuilder().numEntries() == 0) {
+                    compact.currentOutput().getSmallest().decodeFrom(key);
+                }
+                compact.currentOutput().getLargest().decodeFrom(key);
+                compact.getBuilder().add(key, input.value());
+
+                // Close output file if it is big enough
+                if (isBigEnough(compact)) {
+                    status = finishCompactionOutputFile(compact, input);
+                    if (status.isNotOk()) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        return new Pair<>(status, immutableMemtableMicros);
+    }
+
+    boolean isBigEnough(CompactionState compact) {
+        return compact.getBuilder().fileSize() >= compact.getCompaction().maxOutputFileSize();
     }
 
     // used during disk file compaction

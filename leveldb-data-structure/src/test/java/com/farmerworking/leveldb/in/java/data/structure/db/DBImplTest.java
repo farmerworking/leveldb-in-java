@@ -13,6 +13,7 @@ import com.farmerworking.leveldb.in.java.data.structure.log.LogWriter;
 import com.farmerworking.leveldb.in.java.data.structure.memory.*;
 import com.farmerworking.leveldb.in.java.data.structure.table.TableBuilder;
 import com.farmerworking.leveldb.in.java.data.structure.utils.ConsoleLogger;
+import com.farmerworking.leveldb.in.java.data.structure.utils.SimpleIterator;
 import com.farmerworking.leveldb.in.java.data.structure.version.*;
 import com.farmerworking.leveldb.in.java.data.structure.writebatch.WriteBatch;
 import com.farmerworking.leveldb.in.java.file.Env;
@@ -1697,5 +1698,111 @@ public class DBImplTest {
         doReturn(false).when(compaction).shouldStopBefore(anyString());
         result = spyDB.stopDuringIterateCompactionInput(compact, null);
         assertFalse(result);
+    }
+
+    @Test
+    public void testIterateInputEmptyIterator() {
+        Iterator<String, String> iter = mock(Iterator.class);
+        doReturn(false).when(iter).valid();
+
+        Pair<Status, Long> pair = db.iterateInput(iter, null);
+        assertEquals(0L, pair.getValue().longValue());
+        assertTrue(pair.getKey().isOk());
+    }
+
+    @Test
+    public void testIterateInputWhileShutingDown() {
+        db.getShuttingDown().set(true);
+        Iterator<String, String> iter = mock(Iterator.class);
+        doReturn(true).when(iter).valid();
+
+        Pair<Status, Long> pair = db.iterateInput(iter, null);
+        assertEquals(0L, pair.getValue().longValue());
+        assertTrue(pair.getKey().isOk());
+    }
+
+    @Test
+    public void testIterateInputFinishCompactionOutputFileError1() {
+        doReturn(1L).when(spyDB).compactMemtableFirst();
+        doReturn(Status.IOError("force finish compaction output file error")).when(spyDB).
+                finishCompactionOutputFile(any(), any());
+        doReturn(true).when(spyDB).stopDuringIterateCompactionInput(any(), anyString());
+
+        Iterator<String, String> iter = mock(Iterator.class);
+        doReturn(true).when(iter).valid();
+        doReturn("").when(iter).key();
+
+        Pair<Status, Long> pair = spyDB.iterateInput(iter, null);
+        assertEquals("force finish compaction output file error", pair.getKey().getMessage());
+    }
+
+    @Test
+    public void testIterateInputFinishCompactionOutputFileError2() {
+        doReturn(1L).when(spyDB).compactMemtableFirst();
+        doReturn(Status.IOError("force finish compaction output file error")).when(spyDB).
+                finishCompactionOutputFile(any(), any());
+        doReturn(false).when(spyDB).stopDuringIterateCompactionInput(any(), anyString());
+        doReturn(false).when(spyDB).isEntryDroppable(any(), any(), any());
+
+        Iterator<String, String> iter = mock(Iterator.class);
+        doReturn(true).when(iter).valid();
+        doReturn(new InternalKey("a", 1L).encode()).when(iter).key();
+        doReturn("value").when(iter).value();
+
+        Compaction compaction = mock(Compaction.class);
+        doReturn(0L).when(compaction).maxOutputFileSize();
+
+        CompactionState compact = new CompactionState(compaction);
+        Pair<Status, Long> pair = spyDB.iterateInput(iter, compact);
+        assertEquals("force finish compaction output file error", pair.getKey().getMessage());
+    }
+
+    @Test
+    public void testIterateInputOpenCompactionOutputFileError() {
+        doReturn(1L).when(spyDB).compactMemtableFirst();
+        doReturn(Status.IOError("force open compaction output file error")).when(spyDB).openCompactionOutputFile(any());
+        doReturn(false).when(spyDB).stopDuringIterateCompactionInput(any(), anyString());
+        doReturn(false).when(spyDB).isEntryDroppable(any(), any(), any());
+
+        Iterator<String, String> iter = mock(Iterator.class);
+        doReturn(true).when(iter).valid();
+        doReturn(new InternalKey("a", 1L).encode()).when(iter).key();
+
+        Pair<Status, Long> pair = spyDB.iterateInput(iter, new CompactionState(null));
+        assertEquals("force open compaction output file error", pair.getKey().getMessage());
+    }
+
+    @Test
+    public void testIterateInput() {
+        doReturn(10L).when(spyDB).compactMemtableFirst();
+        Iterator<String, String> iter = new SimpleIterator(Lists.newArrayList(
+                new Pair(new InternalKey("a", 1L).encode(), "value1"),
+                new Pair(new InternalKey("b", 100L).encode(), "value2"),
+                new Pair(new InternalKey("b", 99L).encode(), "value3"),
+                new Pair(new InternalKey("c", 5L).encode(), "value4"),
+                new Pair(new InternalKey("d", 6L).encode(), "value5")
+        ), spyDB.getInternalKeyComparator());
+        doReturn(false, true, false).when(spyDB).stopDuringIterateCompactionInput(any(), anyString());
+        doReturn(false, true, false).when(spyDB).isEntryDroppable(any(), any(), any());
+        doReturn(false, true, false).when(spyDB).isBigEnough(any());
+
+        Compaction compaction = new Compaction(options, 1);
+        CompactionState compact = new CompactionState(compaction);
+
+        assertEquals(0, compact.getOutputs().size());
+
+        Pair<Status, Long> pair = spyDB.iterateInput(iter, compact);
+
+        assertTrue(pair.getKey().isOk());
+        assertTrue(pair.getValue() >= 10 * 5);
+        assertEquals(3, compact.getOutputs().size());
+        assertEquals(new InternalKey("a", 1L), compact.getOutputs().get(0).getSmallest());
+        assertEquals(new InternalKey("a", 1L), compact.getOutputs().get(0).getLargest());
+
+        assertEquals(new InternalKey("b", 99L), compact.getOutputs().get(1).getSmallest());
+        assertEquals(new InternalKey("b", 99L), compact.getOutputs().get(1).getLargest());
+
+        assertEquals(new InternalKey("c", 5L), compact.getOutputs().get(2).getSmallest());
+        assertEquals(new InternalKey("d", 6L), compact.getOutputs().get(2).getLargest());
     }
 }
