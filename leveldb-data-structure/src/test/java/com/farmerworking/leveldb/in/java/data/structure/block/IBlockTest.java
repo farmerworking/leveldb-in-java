@@ -58,7 +58,7 @@ public abstract class IBlockTest {
         Options options = new Options();
         IBlockReader block = getBlockReader("");
         Iterator iter = block.iterator(options.getComparator());
-        assertTrue(iter.status().IsCorruption());
+        assertTrue(iter.status().isCorruption());
     }
 
     @Test
@@ -68,7 +68,7 @@ public abstract class IBlockTest {
         Options options = new Options();
         IBlockReader block = getBlockReader(new String(buffer));
         Iterator iter = block.iterator(options.getComparator());
-        assertTrue(iter.status().IsCorruption());
+        assertTrue(iter.status().isCorruption());
     }
 
     @Test

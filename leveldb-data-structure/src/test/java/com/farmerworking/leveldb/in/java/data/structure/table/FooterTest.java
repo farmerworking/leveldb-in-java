@@ -51,6 +51,6 @@ public class FooterTest {
         Footer footer = new Footer();
         Status status = footer.decodeFrom(chars);
         assertNotNull(status);
-        assertTrue(status.IsCorruption());
+        assertTrue(status.isCorruption());
     }
 }

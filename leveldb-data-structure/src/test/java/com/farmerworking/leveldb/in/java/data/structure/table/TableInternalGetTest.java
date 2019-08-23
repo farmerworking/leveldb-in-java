@@ -195,7 +195,7 @@ public abstract class TableInternalGetTest {
         tableReader.indexTransfer = mockTransfer;
 
         Status status = tableReader.internalGet(readOptions, key, null);
-        assertTrue(status.IsCorruption());
+        assertTrue(status.isCorruption());
         assertEquals("force data error", status.getMessage());
 
         // index error
@@ -204,7 +204,7 @@ public abstract class TableInternalGetTest {
         tableReader.indexBlockReader = mockReader;
 
         status = tableReader.internalGet(readOptions, key, null);
-        assertTrue(status.IsCorruption());
+        assertTrue(status.isCorruption());
         assertEquals("force index error", status.getMessage());
     }
 }

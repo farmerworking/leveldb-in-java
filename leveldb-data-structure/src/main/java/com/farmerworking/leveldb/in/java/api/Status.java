@@ -36,19 +36,19 @@ public class Status {
     public boolean isNotOk() { return (!code.equals(Code.kOk.value)); }
 
     // Returns true iff the status indicates a NotFound error.
-    public boolean IsNotFound() { return code.equals(Code.kNotFound.value); }
+    public boolean isNotFound() { return code.equals(Code.kNotFound.value); }
 
     // Returns true iff the status indicates a Corruption error.
-    public boolean IsCorruption() { return code.equals(Code.kCorruption.value); }
+    public boolean isCorruption() { return code.equals(Code.kCorruption.value); }
 
     // Returns true iff the status indicates an IOError.
-    public boolean IsIOError() { return code.equals(Code.kIOError.value); }
+    public boolean isIOError() { return code.equals(Code.kIOError.value); }
 
     // Returns true iff the status indicates a NotSupportedError.
-    public boolean IsNotSupportedError() { return code.equals(Code.kNotSupported.value); }
+    public boolean isNotSupportedError() { return code.equals(Code.kNotSupported.value); }
 
     // Returns true iff the status indicates an InvalidArgument.
-    public boolean IsInvalidArgument() { return code.equals(Code.kInvalidArgument.value); }
+    public boolean isInvalidArgument() { return code.equals(Code.kInvalidArgument.value); }
 
     // Return a string representation of this status suitable for printing.
     // Returns the string "OK" for success.

@@ -33,7 +33,7 @@ public abstract class IMemtableTest {
         memtable.add(1L, ValueType.kTypeDeletion, "empty", "value");
         Pair<Boolean, Pair<Status, String>> result = memtable.get("empty", 1L);
         assertEquals(true, result.getKey());
-        assertTrue(result.getValue().getKey().IsNotFound());
+        assertTrue(result.getValue().getKey().isNotFound());
     }
 
     @Test

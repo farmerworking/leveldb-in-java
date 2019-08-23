@@ -36,7 +36,7 @@ public class VersionTest {
         assertTrue(iterators.isEmpty());
 
         Pair<Status, String> pair = version.get(new ReadOptions(), new InternalKey("a", 1L, ValueType.kTypeValue), new GetStats());
-        assertTrue(pair.getKey().IsNotFound());
+        assertTrue(pair.getKey().isNotFound());
     }
 
     @Test
@@ -297,7 +297,7 @@ public class VersionTest {
                 when(version).getFilesToSearchForLevel(anyInt(), any());
 
         Pair<Status, String> getPair = version.get(new ReadOptions(), new InternalKey("a", 0L, ValueType.kValueTypeForSeek), new GetStats());
-        assertTrue(getPair.getKey().IsCorruption());
+        assertTrue(getPair.getKey().isCorruption());
         assertEquals("table cache get force error", getPair.getKey().getMessage());
     }
 
@@ -319,7 +319,7 @@ public class VersionTest {
         doReturn(saver).when(version).newGetSaver(anyString());
 
         Pair<Status, String> getPair = version.get(new ReadOptions(), new InternalKey("a", 0L, ValueType.kValueTypeForSeek), new GetStats());
-        assertTrue(getPair.getKey().IsCorruption());
+        assertTrue(getPair.getKey().isCorruption());
         assertTrue(getPair.getKey().getMessage().contains("corrupted key for"));
     }
 
@@ -341,7 +341,7 @@ public class VersionTest {
         doReturn(saver).when(version).newGetSaver(anyString());
 
         Pair<Status, String> getPair = version.get(new ReadOptions(), new InternalKey("a", 0L, ValueType.kValueTypeForSeek), new GetStats());
-        assertTrue(getPair.getKey().IsNotFound());
+        assertTrue(getPair.getKey().isNotFound());
     }
 
     @Test
@@ -367,7 +367,7 @@ public class VersionTest {
         doReturn(saver, saver2).when(version).newGetSaver(anyString());
 
         Pair<Status, String> getPair = version.get(new ReadOptions(), new InternalKey("a", 0L, ValueType.kValueTypeForSeek), new GetStats());
-        assertTrue(getPair.getKey().IsNotFound());
+        assertTrue(getPair.getKey().isNotFound());
     }
 
     @Test
@@ -396,7 +396,7 @@ public class VersionTest {
         Pair<Status, String> getPair = version.get(new ReadOptions(), new InternalKey("a", 0L, ValueType.kValueTypeForSeek), getStats);
         assertEquals(0, getStats.getSeekFileLevel());
         assertEquals(1, getStats.getSeekFile().getFileNumber());
-        assertTrue(getPair.getKey().IsNotFound());
+        assertTrue(getPair.getKey().isNotFound());
     }
 
     @Test

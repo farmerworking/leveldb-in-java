@@ -58,7 +58,7 @@ public class Log2MemtableReaderTest {
         Log2MemtableReader spyReader = prepareReadLogRecordError();
         spyReader.invoke();
 
-        assertTrue(spyReader.getStatus().IsCorruption());
+        assertTrue(spyReader.getStatus().isCorruption());
         assertEquals("force log read error", spyReader.getStatus().getMessage());
         verifyReaderDefaultState(spyReader);
     }
@@ -93,7 +93,7 @@ public class Log2MemtableReaderTest {
         Log2MemtableReader spyReader = prepareMalformedLogRecord();
         spyReader.invoke();
 
-        assertTrue(spyReader.getStatus().IsCorruption());
+        assertTrue(spyReader.getStatus().isCorruption());
         assertEquals("log record too small", spyReader.getStatus().getMessage());
         verifyReaderDefaultState(spyReader);
     }
@@ -120,7 +120,7 @@ public class Log2MemtableReaderTest {
         Log2MemtableReader spyReader = prepareBatchIteratorError();
         spyReader.invoke();
 
-        assertTrue(spyReader.getStatus().IsCorruption());
+        assertTrue(spyReader.getStatus().isCorruption());
         assertEquals("force write batch iterate error", spyReader.getStatus().getMessage());
     }
 

@@ -89,10 +89,10 @@ public abstract class EnvTest {
         assertFalse(exist);
 
         Pair<Status, RandomAccessFile> filePair = env.newRandomAccessFile(nonExistentFile);
-        assertTrue(filePair.getKey().IsNotFound());
+        assertTrue(filePair.getKey().isNotFound());
 
         Pair<Status, SequentialFile> filePair2 = env.newSequentialFile(nonExistentFile);
-        assertTrue(filePair2.getKey().IsNotFound());
+        assertTrue(filePair2.getKey().isNotFound());
     }
 
     @Test
@@ -168,7 +168,7 @@ public abstract class EnvTest {
 
         // not exist file
         Pair<Status, Long> tmp2 = getImpl().getFileSize(filename);
-        assertTrue(tmp2.getKey().IsIOError());
+        assertTrue(tmp2.getKey().isIOError());
 
         boolean exists = getImpl().isFileExists(filename);
         assertFalse(exists);
@@ -252,7 +252,7 @@ public abstract class EnvTest {
         doReturn(new Pair<>(Status.Corruption("force new writable file error"), null)).
                 when(spyEnv).newWritableFile(anyString());
         Status status = Env.writeStringToFileSync(spyEnv, s, filename);
-        assertTrue(status.IsCorruption());
+        assertTrue(status.isCorruption());
         assertEquals("force new writable file error", status.getMessage());
 
         WritableFile writableFile = mock(WritableFile.class);
@@ -261,7 +261,7 @@ public abstract class EnvTest {
         // append
         when(writableFile.append(anyString())).thenReturn(Status.Corruption("force append error"));
         status = Env.writeStringToFileSync(spyEnv, s, filename);
-        assertTrue(status.IsCorruption());
+        assertTrue(status.isCorruption());
         assertEquals("force append error", status.getMessage());
         assertFalse(spyEnv.isFileExists(filename));
 
@@ -269,7 +269,7 @@ public abstract class EnvTest {
         when(writableFile.append(anyString())).thenReturn(Status.OK());
         when(writableFile.sync()).thenReturn(Status.Corruption("force sync error"));
         status = Env.writeStringToFileSync(spyEnv, s, filename);
-        assertTrue(status.IsCorruption());
+        assertTrue(status.isCorruption());
         assertEquals("force sync error", status.getMessage());
         assertFalse(spyEnv.isFileExists(filename));
 
@@ -277,14 +277,14 @@ public abstract class EnvTest {
         when(writableFile.sync()).thenReturn(Status.OK());
         when(writableFile.close()).thenReturn(Status.Corruption("force close error"));
         status = Env.writeStringToFileSync(spyEnv, s, filename);
-        assertTrue(status.IsCorruption());
+        assertTrue(status.isCorruption());
         assertEquals("force close error", status.getMessage());
         assertFalse(spyEnv.isFileExists(filename));
 
         // delete
         doReturn(new Pair<>(Status.Corruption("force delete error"), null)).when(spyEnv).delete(anyString());
         status = Env.writeStringToFileSync(spyEnv, s, filename);
-        assertTrue(status.IsCorruption());
+        assertTrue(status.isCorruption());
         assertEquals("force close error", status.getMessage());
     }
 
@@ -324,7 +324,7 @@ public abstract class EnvTest {
         String dbname = env.getTestDirectory().getValue();
 
         Pair<Status, List<String>> pair = env.getChildren(dbname + "notexist");
-        assertTrue(pair.getKey().IsIOError());
+        assertTrue(pair.getKey().isIOError());
 
         pair = env.getChildren(dbname);
         assertTrue(pair.getKey().isOk());
@@ -350,7 +350,7 @@ public abstract class EnvTest {
 
         // lock second time by same jvm
         Pair<Status, FileLock> pair2 = env.lockFile(lockFileName);
-        assertTrue(pair2.getKey().IsIOError());
+        assertTrue(pair2.getKey().isIOError());
         assertEquals(String.format("lock %s already held by process", lockFileName), pair2.getKey().getMessage());
 
         // unlock and lock

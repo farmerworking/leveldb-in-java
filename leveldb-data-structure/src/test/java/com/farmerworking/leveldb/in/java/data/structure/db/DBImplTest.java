@@ -374,7 +374,7 @@ public class DBImplTest {
 
         db.getOptions().setParanoidChecks(true);
         status = db.maybeIgnoreError(Status.Corruption(""));
-        assertTrue(status.IsCorruption());
+        assertTrue(status.isCorruption());
     }
 
     @Test(expected = AssertionError.class)
@@ -395,7 +395,7 @@ public class DBImplTest {
 
         db.getOptions().setParanoidChecks(true);
         result = db.recoverLogFile(5L, true, null);
-        assertTrue(result.getStatus().IsCorruption());
+        assertTrue(result.getStatus().isCorruption());
         assertEquals("force sequence file open error", result.getStatus().getMessage());
     }
 
@@ -683,7 +683,7 @@ public class DBImplTest {
         doReturn(new Pair<>(Status.OK(), false)).when(spyDB).versionsRecover();
 
         Pair<Status, Boolean> pair = spyDB.recover(null);
-        assertTrue(pair.getKey().IsCorruption());
+        assertTrue(pair.getKey().isCorruption());
         assertEquals("1 missing file; e.g. " + dbname + "/1.ldb", pair.getKey().getMessage());
     }
 

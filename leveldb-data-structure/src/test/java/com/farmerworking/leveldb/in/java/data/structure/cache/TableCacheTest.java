@@ -149,7 +149,7 @@ public class TableCacheTest {
         // verify
         saver = new GetSaver(userKey, userComparator);
         status = tableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key, saver);
-        assertTrue(status.IsCorruption());
+        assertTrue(status.isCorruption());
         assertEquals("internal get force error", status.getMessage());
     }
 
@@ -169,7 +169,7 @@ public class TableCacheTest {
         // verify
         saver = new GetSaver(userKey, userComparator);
         status = spyTableCache.get(new ReadOptions(), fileNumber, builder.fileSize(), key, saver);
-        assertTrue(status.IsCorruption());
+        assertTrue(status.isCorruption());
         assertEquals("find table force error", status.getMessage());
     }
 
@@ -213,7 +213,7 @@ public class TableCacheTest {
 
         // pre check
         iter = spyTableCache.iterator(new ReadOptions(), fileNumber, builder.fileSize()).getKey();
-        assertTrue(iter.status().IsCorruption());
+        assertTrue(iter.status().isCorruption());
         assertEquals("find table force error", iter.status().getMessage());
     }
 

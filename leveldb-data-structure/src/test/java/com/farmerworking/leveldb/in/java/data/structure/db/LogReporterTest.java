@@ -1,9 +1,7 @@
 package com.farmerworking.leveldb.in.java.data.structure.db;
 
-import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.data.structure.utils.ConsoleLogger;
-import com.google.gson.Gson;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -22,7 +20,7 @@ public class LogReporterTest {
         LogReporter reporter = new LogReporter(new ConsoleLogger(), "test", status);
 
         reporter.corruption(100L, Status.Corruption("corruption"));
-        assertTrue(status.IsCorruption());
+        assertTrue(status.isCorruption());
         assertEquals("corruption", status.getMessage());
     }
 }

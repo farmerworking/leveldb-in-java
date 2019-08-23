@@ -56,7 +56,7 @@ public class MergingIteratorTest extends AbstractIteratorTest {
 
         assertTrue(iterator.status().isOk());
         doReturn(Status.Corruption("force status error")).when(iter).status();
-        assertTrue(iterator.status().IsCorruption());
+        assertTrue(iterator.status().isCorruption());
         assertEquals("force status error", iterator.status().getMessage());
     }
 }

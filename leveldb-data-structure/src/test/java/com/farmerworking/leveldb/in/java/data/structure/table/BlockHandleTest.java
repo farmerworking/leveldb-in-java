@@ -40,6 +40,6 @@ public class BlockHandleTest {
         Pair<Status, Integer> pair = handle.decodeFrom(input, 0);
         assertNotNull(pair);
         assertFalse(pair.getKey().isOk());
-        assertTrue(pair.getKey().IsCorruption());
+        assertTrue(pair.getKey().isCorruption());
     }
 }
