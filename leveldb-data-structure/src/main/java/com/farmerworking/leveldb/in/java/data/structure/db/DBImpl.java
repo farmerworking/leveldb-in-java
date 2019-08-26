@@ -604,6 +604,41 @@ public class DBImpl implements DB {
     }
 
 
+    Status actualCompact(CompactionState compact, long startMicros, CompactionStats stats) {
+        assert !this.mutex.isHeldByCurrentThread();
+        Iterator<String, String> input = makeInputIterator(compact);
+
+        Pair<Status, Long> pair = iterateInput(input, compact);
+        Status status = pair.getKey();
+        Long immutableMemtableMicros = pair.getValue();
+
+        if (status.isOk() && this.shuttingDown.get()) {
+            status = Status.IOError("Deleting DB during compaction");
+        }
+        if (status.isOk() && compact.getBuilder() != null) {
+            status = finishCompactionOutputFile(compact, input);
+        }
+        if (status.isOk()) {
+            status = input.status();
+        }
+
+        stats.setMicros(System.currentTimeMillis() - startMicros - immutableMemtableMicros);
+        for (int which = 0; which < 2; which++) {
+            for (int i = 0; i < compact.getCompaction().numInputFiles(which); i++) {
+                stats.setBytesRead(stats.getBytesRead() + compact.getCompaction().input(which, i).getFileSize());
+            }
+        }
+
+        for (int i = 0; i < compact.getOutputs().size(); i++) {
+            stats.setBytesWritten(stats.getBytesWritten() + compact.getOutputs().get(i).getFileSize());
+        }
+        return status;
+    }
+
+    Iterator<String, String> makeInputIterator(CompactionState compact) {
+        return this.versions.makeInputIterator(compact.getCompaction());
+    }
+
     static class IterateInputState {
         String currentUserKey = null;
         boolean hasCurrentUserKey = false;

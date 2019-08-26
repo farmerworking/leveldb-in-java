@@ -5,6 +5,7 @@ import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.ReadOptions;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.common.TestUtils;
+import com.farmerworking.leveldb.in.java.data.structure.block.EmptyIterator;
 import com.farmerworking.leveldb.in.java.data.structure.cache.TableCache;
 import com.farmerworking.leveldb.in.java.data.structure.log.ILogReader;
 import com.farmerworking.leveldb.in.java.data.structure.log.ILogWriter;
@@ -1804,5 +1805,75 @@ public class DBImplTest {
 
         assertEquals(new InternalKey("c", 5L), compact.getOutputs().get(2).getSmallest());
         assertEquals(new InternalKey("d", 6L), compact.getOutputs().get(2).getLargest());
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testActualCompactShouldDoInLockReleaseStateForPerformance() {
+        db.getMutex().lock();
+        db.actualCompact(null, 0L, null);
+    }
+
+    @Test
+    public void testActualCompactShuttingDown() {
+        doReturn(new Pair<>(Status.OK(), 0L)).when(spyDB).iterateInput(any(), any());
+        Compaction compaction = new Compaction(options, 1);
+        CompactionState compact = new CompactionState(compaction);
+
+        spyDB.getShuttingDown().set(true);
+        Status status = spyDB.actualCompact(compact, 0L, new CompactionStats());
+
+        assertEquals("Deleting DB during compaction", status.getMessage());
+    }
+
+    @Test
+    public void testActualCompactInputError() {
+        doReturn(new Pair<>(Status.OK(), 0L)).when(spyDB).iterateInput(any(), any());
+        doReturn(new EmptyIterator(Status.Corruption("force iterator error"))).when(spyDB).makeInputIterator(any());
+
+        Compaction compaction = new Compaction(options, 1);
+        CompactionState compact = new CompactionState(compaction);
+
+        Status status = spyDB.actualCompact(compact, 0L, new CompactionStats());
+
+        assertEquals("force iterator error", status.getMessage());
+    }
+
+    @Test
+    public void testActualCompactFinishCompactionOutputError() {
+        doReturn(new Pair<>(Status.OK(), 0L)).when(spyDB).iterateInput(any(), any());
+        doReturn(Status.Corruption("force finish compaction output error")).when(spyDB).finishCompactionOutputFile(any(), any());
+
+        Compaction compaction = new Compaction(options, 1);
+        CompactionState compact = new CompactionState(compaction);
+        compact.setBuilder(mock(TableBuilder.class));
+
+        Status status = spyDB.actualCompact(compact, 0L, new CompactionStats());
+
+        assertEquals("force finish compaction output error", status.getMessage());
+    }
+
+    @Test
+    public void testActualCompaction() {
+        Compaction compaction = new Compaction(options, 1);
+
+        CompactionState compact = new CompactionState(compaction);
+        compact.setSmallestSnapshot(spyDB.getVersions().getLastSequence());
+
+        compaction.getInputs()[0].add(new FileMetaData(1L, 100L, null, null));
+        compaction.getInputs()[1].add(new FileMetaData(2L, 200L, null, null));
+        compaction.setInputVersion(spyDB.getVersions().getCurrent());
+
+        doReturn(new SimpleIterator(Lists.newArrayList(
+                new Pair<>(new InternalKey("a", 1L, ValueType.kTypeValue).encode(), "value1"),
+                new Pair<>(new InternalKey("b", 2L, ValueType.kTypeValue).encode(), "value2"),
+                new Pair<>(new InternalKey("c", 3L, ValueType.kTypeValue).encode(), "value3")
+        ), spyDB.getInternalKeyComparator())).when(spyDB).makeInputIterator(compact);
+
+        CompactionStats stats = new CompactionStats();
+        Status status = spyDB.actualCompact(compact, System.currentTimeMillis(), stats);
+        assertTrue(status.isOk());
+        assertEquals(300L, stats.getBytesRead());
+        assertEquals(141L, stats.getBytesWritten());
+        assertTrue(stats.getMicros() > 0);
     }
 }
