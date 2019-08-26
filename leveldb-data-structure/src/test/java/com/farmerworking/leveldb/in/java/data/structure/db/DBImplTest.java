@@ -165,6 +165,7 @@ public class DBImplTest {
         assertNotNull(db.getBuilder());
         assertEquals(Config.kNumLevels, db.getStats().length);
         assertTrue(db.getBgError().isOk());
+        assertNotNull(db.getSnapshots());
         for (int i = 0; i < Config.kNumLevels; i++) {
             assertNotNull(db.getStats()[i]);
         }
@@ -1875,5 +1876,129 @@ public class DBImplTest {
         assertEquals(300L, stats.getBytesRead());
         assertEquals(141L, stats.getBytesWritten());
         assertTrue(stats.getMicros() > 0);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testDoCompactionWorkAssertion1() {
+        CompactionState compactionState = mock(CompactionState.class);
+        Compaction compaction = new Compaction(options, 1);
+        doReturn(compaction).when(compactionState).getCompaction();
+
+        doReturn(0).when(spyDB).numLevelFiles(anyInt());
+        spyDB.doCompactionWork(compactionState);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testDoCompactionWorkAssertion2() {
+        doReturn(1).when(spyDB).numLevelFiles(anyInt());
+
+        CompactionState compactionState = mock(CompactionState.class);
+        Compaction compaction = new Compaction(options, 1);
+        doReturn(compaction).when(compactionState).getCompaction();
+
+        doReturn(mock(TableBuilder.class)).when(compactionState).getBuilder();
+        spyDB.doCompactionWork(compactionState);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testDoCompactionWorkAssertion3() {
+        doReturn(1).when(spyDB).numLevelFiles(anyInt());
+
+        CompactionState compactionState = mock(CompactionState.class);
+        Compaction compaction = new Compaction(options, 1);
+        doReturn(compaction).when(compactionState).getCompaction();
+        doReturn(mock(WritableFile.class)).when(compactionState).getOutfile();
+
+        spyDB.doCompactionWork(compactionState);
+    }
+
+    @Test
+    public void testDoCompactionWorkActualCompactError() {
+        Compaction compaction = new Compaction(options, 1);
+        CompactionState compact = new CompactionState(compaction);
+
+        doReturn(1).when(spyDB).numLevelFiles(anyInt());
+        doReturn(Status.Corruption("force actual compact error")).when(spyDB).actualCompact(any(), anyLong(), any());
+
+        spyDB.getMutex().lock();
+        Status status = spyDB.doCompactionWork(compact);
+        verify(spyDB, times(1)).recordBackgroundError(any());
+        assertEquals("force actual compact error", status.getMessage());
+    }
+
+    @Test
+    public void testDoCompactionWorkInstallCompactionResultError() {
+        Compaction compaction = new Compaction(options, 1);
+        CompactionState compact = new CompactionState(compaction);
+
+        doReturn(1).when(spyDB).numLevelFiles(anyInt());
+        doReturn(Status.OK()).when(spyDB).actualCompact(any(), anyLong(), any());
+        doReturn(Status.Corruption("force install compaction result error")).when(spyDB).actualCompact(any(), anyLong(), any());
+
+        spyDB.getMutex().lock();
+        Status status = spyDB.doCompactionWork(compact);
+        verify(spyDB, times(1)).recordBackgroundError(any());
+        assertEquals("force install compaction result error", status.getMessage());
+    }
+
+    @Test
+    public void testDoCompactionWork1() {
+        spyDB.getMutex().lock();
+        Compaction compaction = new Compaction(options, 1);
+        CompactionState compact = new CompactionState(compaction);
+        long snapshot = spyDB.getVersions().getLastSequence();
+        doReturn(1).when(spyDB).numLevelFiles(anyInt());
+
+        spyDB.getOptions().setCreateIfMissing(true);
+        Pair<Status, Boolean> pair = spyDB.recover(new VersionEdit());
+        assertTrue(pair.getKey().isOk());
+        
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Thread.sleep(10);
+                return invocation.callRealMethod();
+            }
+        }).when(spyDB).actualCompact(any(), anyLong(), any());
+
+        CompactionStats before = new CompactionStats(spyDB.getStats()[compaction.getLevel() + 1]);
+        Status status = spyDB.doCompactionWork(compact);
+
+        assertTrue(status.isOk());
+        assertEquals(snapshot, compact.getSmallestSnapshot().longValue());
+        verify(spyDB, times(1)).installCompactionResults(compact);
+        assertTrue(spyDB.getMutex().isHeldByCurrentThread());
+        assertNotEquals(before, spyDB.getStats()[compaction.getLevel() + 1]);
+    }
+
+    @Test
+    public void testDoCompactionWork2() {
+        spyDB.getMutex().lock();
+        Compaction compaction = new Compaction(options, 1);
+        CompactionState compact = new CompactionState(compaction);
+        spyDB.getSnapshots().add(9999L);
+        long snapshot = spyDB.getSnapshots().getFirst();
+        doReturn(1).when(spyDB).numLevelFiles(anyInt());
+
+        spyDB.getOptions().setCreateIfMissing(true);
+        Pair<Status, Boolean> pair = spyDB.recover(new VersionEdit());
+        assertTrue(pair.getKey().isOk());
+
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Thread.sleep(10);
+                return invocation.callRealMethod();
+            }
+        }).when(spyDB).actualCompact(any(), anyLong(), any());
+
+        CompactionStats before = new CompactionStats(spyDB.getStats()[compaction.getLevel() + 1]);
+        Status status = spyDB.doCompactionWork(compact);
+
+        assertTrue(status.isOk());
+        assertEquals(snapshot, compact.getSmallestSnapshot().longValue());
+        verify(spyDB, times(1)).installCompactionResults(compact);
+        assertTrue(spyDB.getMutex().isHeldByCurrentThread());
+        assertNotEquals(before, spyDB.getStats()[compaction.getLevel() + 1]);
     }
 }

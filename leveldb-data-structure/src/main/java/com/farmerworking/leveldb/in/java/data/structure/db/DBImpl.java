@@ -54,6 +54,7 @@ public class DBImpl implements DB {
     private ILogWriter log;
     private long seed; // For sampling
 
+    private LinkedList<Long> snapshots = new LinkedList<>();
     // Set of table files to protect from deletion because they are
     // part of ongoing compactions.
     Set<Long> pendingOutputs = new HashSet<>();
@@ -603,6 +604,50 @@ public class DBImpl implements DB {
         return this.versions.logAndApply(edit, this.mutex);
     }
 
+
+    Status doCompactionWork(CompactionState compact) {
+        long startMicros = System.currentTimeMillis();
+
+        Options.Logger.log(this.options.getInfoLog(), String.format("Compacting %d@%d + %d@%d files",
+                compact.getCompaction().numInputFiles(0),
+                compact.getCompaction().getLevel(),
+                compact.getCompaction().numInputFiles(1),
+                compact.getCompaction().getLevel() + 1));
+
+        assert numLevelFiles(compact.getCompaction().getLevel()) > 0;
+        assert compact.getBuilder() == null;
+        assert compact.getOutfile() == null;
+
+        if (snapshots.isEmpty()) {
+            compact.setSmallestSnapshot(this.versions.getLastSequence());
+        } else {
+            compact.setSmallestSnapshot(snapshots.getFirst());
+        }
+
+        // Release mutex while we're actually doing the compaction work
+        CompactionStats stats = new CompactionStats();
+
+        this.mutex.unlock();
+        Status status = actualCompact(compact, startMicros, stats);
+        this.mutex.lock();
+
+        this.stats[compact.getCompaction().getLevel() + 1].add(stats);
+
+        if (status.isOk()) {
+            status = installCompactionResults(compact);
+        }
+
+        if (status.isNotOk()) {
+            recordBackgroundError(status);
+        }
+
+        Options.Logger.log(options.getInfoLog(), String.format("compacted to: %s", versions.levelSummary()));
+        return status;
+    }
+
+    int numLevelFiles(int level) {
+        return this.versions.numLevelFiles(level);
+    }
 
     Status actualCompact(CompactionState compact, long startMicros, CompactionStats stats) {
         assert !this.mutex.isHeldByCurrentThread();
