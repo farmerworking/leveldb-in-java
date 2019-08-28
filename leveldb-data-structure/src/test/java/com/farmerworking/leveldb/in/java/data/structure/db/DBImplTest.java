@@ -2001,4 +2001,48 @@ public class DBImplTest {
         assertTrue(spyDB.getMutex().isHeldByCurrentThread());
         assertNotEquals(before, spyDB.getStats()[compaction.getLevel() + 1]);
     }
+
+    @Test
+    public void testPickCompaction() {
+        VersionSet versionSet = mock(VersionSet.class);
+
+        db.setVersions(versionSet);
+        Pair<Compaction, InternalKey> pair = db.pickCompaction(false);
+
+        verify(versionSet, times(1)).pickCompaction();
+        assertNull(pair.getValue());
+    }
+
+    @Test
+    public void testPickCompactionManual1() {
+        VersionSet versionSet = mock(VersionSet.class);
+        doReturn(null).when(versionSet).compactRange(anyInt(), any(), any());
+        db.setVersions(versionSet);
+        db.setManualCompaction(new ManualCompaction());
+
+        Pair<Compaction, InternalKey> pair = db.pickCompaction(true);
+
+        verify(versionSet, never()).pickCompaction();
+        assertTrue(db.getManualCompaction().isDone());
+        assertNull(pair.getValue());
+    }
+
+    @Test
+    public void testPickCompactionManual2() {
+        VersionSet versionSet = mock(VersionSet.class);
+        Compaction compaction = new Compaction(options, 1);
+        InternalKey smallest = new InternalKey("a", 100L, ValueType.kTypeValue);
+        InternalKey biggest = new InternalKey("g", 200L, ValueType.kTypeValue);
+        compaction.getInputs()[0].add(new FileMetaData(1L, 1L, smallest, biggest));
+
+        doReturn(compaction).when(versionSet).compactRange(anyInt(), any(), any());
+        db.setVersions(versionSet);
+        db.setManualCompaction(new ManualCompaction());
+
+        Pair<Compaction, InternalKey> pair = db.pickCompaction(true);
+
+        verify(versionSet, never()).pickCompaction();
+        assertFalse(db.getManualCompaction().isDone());
+        assertEquals(biggest, pair.getValue());
+    }
 }

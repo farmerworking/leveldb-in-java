@@ -604,6 +604,31 @@ public class DBImpl implements DB {
         return this.versions.logAndApply(edit, this.mutex);
     }
 
+    Pair<Compaction, InternalKey> pickCompaction(boolean isManual) {
+        Compaction compaction;
+        InternalKey manualEnd = null;
+        if (isManual) {
+            compaction = this.versions.compactRange(
+                    this.manualCompaction.getLevel(),
+                    this.manualCompaction.getBegin(),
+                    this.manualCompaction.getEnd());
+
+            this.manualCompaction.setDone(compaction == null);
+            if (compaction != null) {
+                manualEnd = compaction.input(0, compaction.numInputFiles(0) - 1).getLargest();
+            }
+            Options.Logger.log(this.options.getInfoLog(), String.format("Manual compaction at level-%d from %s .. %s; will stop at %s",
+                    this.manualCompaction.getLevel(),
+                    (this.manualCompaction.getBegin() != null ? this.manualCompaction.getBegin().toString() : "(begin)"),
+                    (this.manualCompaction.getEnd() != null ? this.manualCompaction.getEnd().toString() : "(end)"),
+                    (this.manualCompaction.isDone() ? "(end)" : manualEnd.toString())));
+
+        } else {
+            compaction = this.versions.pickCompaction();
+        }
+
+        return new Pair<>(compaction, manualEnd);
+    }
 
     Status doCompactionWork(CompactionState compact) {
         long startMicros = System.currentTimeMillis();
