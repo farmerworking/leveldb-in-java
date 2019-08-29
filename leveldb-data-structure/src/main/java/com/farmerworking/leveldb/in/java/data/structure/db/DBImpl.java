@@ -405,7 +405,7 @@ public class DBImpl implements DB {
 
     Status writeLevel0Table(IMemtable memtable, VersionEdit edit, Version base) {
         assert this.mutex.isHeldByCurrentThread();
-        long start = System.nanoTime();
+        long start = System.currentTimeMillis();
         FileMetaData metaData = new FileMetaData();
         metaData.setFileNumber(this.versions.newFileNumber());
 
@@ -437,7 +437,7 @@ public class DBImpl implements DB {
         }
 
         CompactionStats stats = new CompactionStats();
-        stats.setMicros(System.nanoTime() - start);
+        stats.setMicros(System.currentTimeMillis() - start);
         stats.setBytesWritten(metaData.getFileSize());
         this.stats[level].add(stats);
         return status;
@@ -604,6 +604,44 @@ public class DBImpl implements DB {
         return this.versions.logAndApply(edit, this.mutex);
     }
 
+    void backgroundCompaction() {
+        assert this.mutex.isHeldByCurrentThread();
+
+        if (this.immutableMemtable != null) {
+            this.compactMemtable();
+            return;
+        }
+
+        boolean isManual = isManualCompaction();
+        Pair<Compaction, InternalKey> pair = pickCompaction(isManual);
+        Compaction compaction = pair.getKey();
+        InternalKey manualEnd = pair.getValue();
+
+        Status status = doBackgroundCompaction(isManual, compaction);
+
+        if (status.isOk()) {
+            // Done
+        } else if (this.shuttingDown.get()) {
+            // Ignore compaction errors found during shutting down
+        } else {
+            Options.Logger.log(options.getInfoLog(), String.format("Compaction error: %s", status.toString()));
+        }
+
+        if (isManual) {
+            if (status.isNotOk()) {
+                // mark manual compaction done if exception happens
+                this.manualCompaction.setDone(true);
+            }
+
+            if (!this.manualCompaction.isDone()) {
+                // We only compacted part of the requested range.  Update *m
+                // to the range that is left to be compacted.
+                this.manualCompaction.setTmpStorage(manualEnd);
+                this.manualCompaction.setBegin(manualEnd);
+            }
+            this.manualCompaction = null;
+        }
+    }
 
     Status doBackgroundCompaction(boolean isManual, Compaction compaction) {
         Status status = Status.OK();

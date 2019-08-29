@@ -2115,4 +2115,47 @@ public class DBImplTest {
         assertEquals(1, tmp.getKey().intValue());
         assertEquals(100L, tmp.getValue().longValue());
     }
+
+    @Test(expected =  AssertionError.class)
+    public void testBackgroundCompactionHoldLockException() {
+        db.backgroundCompaction();
+    }
+
+    @Test
+    public void testBackgroundCompactionMemtableCompact() {
+        spyDB.getMutex().lock();
+        spyDB.setImmutableMemtable(mock(Memtable.class));
+        doNothing().when(spyDB).compactMemtable();
+
+        spyDB.backgroundCompaction();
+        verify(spyDB, times(1)).compactMemtable();
+    }
+
+    @Test
+    public void testBackgroundCompactionManualError() {
+        ManualCompaction compaction = new ManualCompaction();
+        spyDB.getMutex().lock();
+        spyDB.setManualCompaction(compaction);
+
+        doReturn(Status.Corruption("")).when(spyDB).doBackgroundCompaction(anyBoolean(), any());
+        spyDB.backgroundCompaction();
+        assertTrue(compaction.isDone());
+        assertNull(spyDB.getManualCompaction());
+    }
+
+    @Test
+    public void testBackgroundCompactionManualCompactionPart() {
+        ManualCompaction compaction = new ManualCompaction();
+        spyDB.getMutex().lock();
+        spyDB.setManualCompaction(compaction);
+
+        doReturn(Status.OK()).when(spyDB).doBackgroundCompaction(anyBoolean(), any());
+        InternalKey start = new InternalKey();
+        doReturn(new Pair<>(null, start)).when(spyDB).pickCompaction(anyBoolean());
+
+        spyDB.backgroundCompaction();
+        assertNull(spyDB.getManualCompaction());
+        assertEquals(compaction.getBegin(), start);
+        assertFalse(compaction.isDone());
+    }
 }

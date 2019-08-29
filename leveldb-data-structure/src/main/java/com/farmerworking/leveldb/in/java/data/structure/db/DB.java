@@ -42,7 +42,7 @@ public interface DB {
 
         if (status.isOk()) {
             db.deleteObsoleteFiles();
-//            db.maybeScheduleCompaction();
+            db.maybeScheduleCompaction();
         }
         db.getMutex().unlock();
 
