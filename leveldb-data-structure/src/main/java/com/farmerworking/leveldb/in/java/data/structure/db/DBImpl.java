@@ -604,6 +604,40 @@ public class DBImpl implements DB {
         return this.versions.logAndApply(edit, this.mutex);
     }
 
+
+    Status doBackgroundCompaction(boolean isManual, Compaction compaction) {
+        Status status = Status.OK();
+        if (compaction == null) {
+            // Nothing to do
+        } else if (!isManual && compaction.isTrivialMove()) {
+            // Move file to next level
+            assert compaction.numInputFiles(0) == 1;
+            FileMetaData metaData = compaction.input(0, 0);
+            compaction.getEdit().deleteFile(compaction.getLevel(), metaData.getFileNumber());
+            compaction.getEdit().addFile(compaction.getLevel() + 1, metaData.getFileNumber(), metaData.getFileSize(), metaData.getSmallest(), metaData.getLargest());
+            status = logAndApply(compaction.getEdit());
+            if (status.isNotOk()) {
+                recordBackgroundError(status);
+            }
+            Options.Logger.log(this.options.getInfoLog(), String.format("Moved #%d to level-%d %d bytes %s: %s",
+                    metaData.getFileNumber(),
+                    compaction.getLevel() + 1,
+                    metaData.getFileSize(),
+                    status.toString(),
+                    this.versions.levelSummary()));
+        } else {
+            CompactionState compact = new CompactionState(compaction);
+            status = doCompactionWork(compact);
+            if (status.isNotOk()) {
+                recordBackgroundError(status);
+            }
+            compaction.releaseInputs();
+            cleanupCompaction(compact);
+            deleteObsoleteFiles();
+        }
+        return status;
+    }
+
     Pair<Compaction, InternalKey> pickCompaction(boolean isManual) {
         Compaction compaction;
         InternalKey manualEnd = null;

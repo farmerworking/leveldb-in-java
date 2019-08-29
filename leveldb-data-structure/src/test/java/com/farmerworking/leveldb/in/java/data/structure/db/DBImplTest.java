@@ -2045,4 +2045,74 @@ public class DBImplTest {
         assertFalse(db.getManualCompaction().isDone());
         assertEquals(biggest, pair.getValue());
     }
+
+    @Test
+    public void testDoBackgroundCompactionNothingTodo() {
+        Status status = db.doBackgroundCompaction(true, null);
+        assertTrue(status.isOk());
+    }
+
+    @Test
+    public void testDoBackgroundCompactionDoCompactionWorkError() {
+        doReturn(Status.Corruption("force do compaction work error")).when(spyDB).doCompactionWork(any());
+        spyDB.getMutex().lock();
+        Status status = spyDB.doBackgroundCompaction(true, mock(Compaction.class));
+        assertEquals("force do compaction work error", status.getMessage());
+    }
+
+    @Test
+    public void testDoBackgroundCompaction() {
+        Compaction compaction = mock(Compaction.class);
+        doReturn(Status.OK()).when(spyDB).doCompactionWork(any());
+
+        spyDB.getMutex().lock();
+        Status status = spyDB.doBackgroundCompaction(true, compaction);
+
+        assertTrue(status.isOk());
+        verify(spyDB, times(1)).doCompactionWork(any());
+        verify(spyDB, times(1)).cleanupCompaction(any());
+        verify(spyDB, times(1)).deleteObsoleteFiles();
+        verify(compaction, times(1)).releaseInputs();
+    }
+
+    @Test
+    public void testDoBackgroundCompactionTrivialMoveLogAndApplyError() {
+        doReturn(Status.Corruption("force log and apply error")).when(spyDB).logAndApply(any());
+
+        Compaction compaction = new Compaction(options, 1);
+        compaction.setInputVersion(spyDB.getVersions().getCurrent());
+        compaction.getInputs()[0].add(mock(FileMetaData.class));
+        assertTrue(compaction.isTrivialMove());
+
+        spyDB.getMutex().lock();
+        Status status = spyDB.doBackgroundCompaction(false, compaction);
+
+        assertEquals("force log and apply error", status.getMessage());
+    }
+
+    @Test
+    public void testDoBackgroundCompactionTrivialMove() {
+        Compaction compaction = new Compaction(options, 1);
+        compaction.setInputVersion(spyDB.getVersions().getCurrent());
+        compaction.getInputs()[0].add(new FileMetaData(100L, 100L, null, null));
+
+        assertTrue(compaction.isTrivialMove());
+        assertTrue(compaction.getEdit().getNewFiles().isEmpty());
+        assertTrue(compaction.getEdit().getDeletedFiles().isEmpty());
+
+        doReturn(Status.OK()).when(spyDB).logAndApply(any());
+
+        Status status = spyDB.doBackgroundCompaction(false, compaction);
+        verify(spyDB, times(1)).logAndApply(compaction.getEdit());
+
+        assertTrue(status.isOk());
+        assertEquals(1, compaction.getEdit().getNewFiles().size());
+        assertEquals(1, compaction.getEdit().getDeletedFiles().size());
+
+        assertEquals(2, compaction.getEdit().getNewFiles().get(0).getKey().intValue());
+        assertEquals(100L, compaction.getEdit().getNewFiles().get(0).getValue().getFileNumber());
+        Pair<Integer, Long> tmp = compaction.getEdit().getDeletedFiles().iterator().next();
+        assertEquals(1, tmp.getKey().intValue());
+        assertEquals(100L, tmp.getValue().longValue());
+    }
 }
