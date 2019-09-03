@@ -306,7 +306,7 @@ public class DBImplTest {
         // stats
         assertNotEquals(beforeStats, db.getStats()[level]);
         assertEquals(beforeStats.getBytesWritten() + metaData.getFileSize(), db.getStats()[level].getBytesWritten());
-        assertTrue(beforeStats.getMicros() < db.getStats()[level].getMicros());
+        assertTrue(beforeStats.getMicros() <= db.getStats()[level].getMicros());
 
         // FileMetaData
         assertTrue(metaData.getFileNumber() > 0);
