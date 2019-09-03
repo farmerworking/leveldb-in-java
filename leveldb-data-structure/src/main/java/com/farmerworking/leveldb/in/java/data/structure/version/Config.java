@@ -7,10 +7,10 @@ public class Config {
     static int kL0_CompactionTrigger = 4;
 
     // Soft limit on number of level-0 files.  We slow down writes at this point.
-    static int kL0_SlowdownWritesTrigger = 8;
+    public static int kL0_SlowdownWritesTrigger = 8;
 
     // Maximum number of level-0 files.  We stop writes at this point.
-    static int kL0_StopWritesTrigger = 12;
+    public static int kL0_StopWritesTrigger = 12;
 
     /**
      * Maximum level to which a new compacted memtable is pushed if it

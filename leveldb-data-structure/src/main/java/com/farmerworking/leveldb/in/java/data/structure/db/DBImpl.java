@@ -1,15 +1,14 @@
 package com.farmerworking.leveldb.in.java.data.structure.db;
 
+import com.farmerworking.leveldb.in.java.api.*;
 import com.farmerworking.leveldb.in.java.api.Iterator;
-import com.farmerworking.leveldb.in.java.api.Options;
-import com.farmerworking.leveldb.in.java.api.ReadOptions;
-import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.data.structure.cache.ShardedLRUCache;
 import com.farmerworking.leveldb.in.java.data.structure.cache.TableCache;
 import com.farmerworking.leveldb.in.java.data.structure.log.*;
 import com.farmerworking.leveldb.in.java.data.structure.memory.*;
 import com.farmerworking.leveldb.in.java.data.structure.table.TableBuilder;
 import com.farmerworking.leveldb.in.java.data.structure.version.*;
+import com.farmerworking.leveldb.in.java.data.structure.writebatch.WriteBatch;
 import com.farmerworking.leveldb.in.java.file.*;
 import javafx.util.Pair;
 import lombok.Data;
@@ -54,6 +53,8 @@ public class DBImpl implements DB {
     private ILogWriter log;
     private long seed; // For sampling
 
+    private Deque<Writer> writerList;
+
     private LinkedList<Long> snapshots = new LinkedList<>();
     // Set of table files to protect from deletion because they are
     // part of ongoing compactions.
@@ -89,6 +90,7 @@ public class DBImpl implements DB {
         this.seed = 0;
         this.bgCompactionScheduled = false;
         this.manualCompaction = null;
+        this.writerList = new ArrayDeque<>();
 
         this.hasImmutableMemtable = new AtomicBoolean(false);
         int tableCacheSize = this.options.getMaxFileSize() - kNumNonTableCacheFiles;
@@ -130,6 +132,137 @@ public class DBImpl implements DB {
             status = FileName.setCurrentFile(this.env, this.dbname, NEW_DB_MANIFEST_NUMBER);
         } else {
             this.env.delete(manifest);
+        }
+
+        return status;
+    }
+
+    public Pair<Status, String> get(ReadOptions readOptions, String key) {
+        Status status = Status.OK();
+        String result = null;
+        try {
+            this.mutex.lock();
+            Long snapshot;
+            if (readOptions.getSnapshot() != null) {
+                snapshot = readOptions.getSnapshot();
+            } else {
+                snapshot = this.versions.getLastSequence();
+            }
+
+            IMemtable localMemtable = this.memtable;
+            IMemtable localImmutable = this.immutableMemtable;
+            Version localCurrentVersion = this.versions.getCurrent();
+            localCurrentVersion.ref();
+
+            boolean haveStatUpdate = false;
+            GetStats getStats = new GetStats();
+
+            // Unlock while reading from files and memtables
+            try {
+                this.mutex.unlock();
+                Pair<Boolean, Pair<Status, String>> memtableGet = localMemtable.get(key, snapshot);
+                if (memtableGet.getKey()) {
+                    status = memtableGet.getValue().getKey();
+                    result = memtableGet.getValue().getValue();
+                } else if (localImmutable != null) {
+                    Pair<Boolean, Pair<Status, String>> immutableMemtableGet = localImmutable.get(key, snapshot);
+
+                    if (immutableMemtableGet.getKey()) {
+                        status = immutableMemtableGet.getValue().getKey();
+                        result = immutableMemtableGet.getValue().getValue();
+                    } else {
+                        Pair<Status, String> versionGet = localCurrentVersion.get(readOptions, new InternalKey(key, snapshot), getStats);
+                        status = versionGet.getKey();
+                        result = versionGet.getValue();
+                        haveStatUpdate = true;
+                    }
+                } else {
+                    Pair<Status, String> versionGet = localCurrentVersion.get(readOptions, new InternalKey(key, snapshot), getStats);
+                    status = versionGet.getKey();
+                    result = versionGet.getValue();
+                    haveStatUpdate = true;
+                }
+            } finally {
+                this.mutex.lock();
+            }
+
+            if (haveStatUpdate && localCurrentVersion.updateStats(getStats)) {
+                maybeScheduleCompaction();
+            }
+            localCurrentVersion.unref();
+            return new Pair<>(status, result);
+        } finally {
+            this.mutex.unlock();
+        }
+    }
+    public Status makeRoomForWrite(boolean force) {
+        assert this.mutex.isHeldByCurrentThread();
+        assert !this.writerList.isEmpty();
+        boolean allowDelay = !force;
+        Status status = Status.OK();
+
+        while(true) {
+            if (this.bgError.isNotOk()) {
+                status = this.bgError;
+                break;
+            } else if (allowDelay && this.versions.numLevelFiles(0) >= Config.kL0_SlowdownWritesTrigger) {
+                // We are getting close to hitting a hard limit on the number of
+                // L0 files.  Rather than delaying a single write by several
+                // seconds when we hit the hard limit, start delaying each
+                // individual write by 1ms to reduce latency variance.  Also,
+                // this delay hands over some CPU to the compaction thread in
+                // case it is sharing the same core as the writer.
+                this.mutex.unlock();
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    status = Status.IOError("thread sleep interrupted");
+                    break;
+                }
+                allowDelay = false; // Do not delay a single write more than once
+                this.mutex.lock();
+            } else if (!force && this.memtable.approximateMemoryUsage() <= this.options.getWriteBufferSize()) {
+                // There is room in current memtable
+                break;
+            } else if (this.immutableMemtable != null) {
+                // We have filled up the current memtable, but the previous
+                // one is still being compacted, so we wait.
+                Options.Logger.log(this.options.getInfoLog(), "Current memtable full; waiting...\n");
+                try {
+                    this.bgCondition.await();
+                } catch (InterruptedException e) {
+                    status = Status.IOError("bgCondition await interrupted");
+                    break;
+                }
+            } else if (this.versions.numLevelFiles(0) >= Config.kL0_StopWritesTrigger) {
+                // There are too many level-0 files.
+                Options.Logger.log(this.options.getInfoLog(), "Too many L0 files; waiting...\n");
+                try {
+                    this.bgCondition.await();
+                } catch (InterruptedException e) {
+                    status = Status.IOError("bgCondition await interrupted");
+                    break;
+                }
+            } else {
+                // Attempt to switch to a new memtable and trigger compaction of old
+                assert this.versions.getPrevLogNumber() == 0;
+                long newLogNumber = this.versions.getNextFileNumber();
+                Pair<Status, WritableFile> writable = this.env.newWritableFile(FileName.logFileName(this.dbname, newLogNumber));
+                status = writable.getKey();
+                if (status.isNotOk()) {
+                    // Avoid chewing through file number space in a tight loop.
+                    this.versions.reuseFileNumber(newLogNumber);
+                    break;
+                }
+                this.logFile = writable.getValue();
+                this.logFileNumber = newLogNumber;
+                this.log = new LogWriter(this.logFile);
+                this.immutableMemtable = this.memtable;
+                this.hasImmutableMemtable.set(true);
+                this.memtable = new Memtable(this.internalKeyComparator);
+                force = false; // Do not force another compaction if have room
+                this.maybeScheduleCompaction();
+            }
         }
 
         return status;

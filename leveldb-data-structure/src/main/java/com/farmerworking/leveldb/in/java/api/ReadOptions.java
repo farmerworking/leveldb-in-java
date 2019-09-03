@@ -8,4 +8,6 @@ public class ReadOptions {
     // verified against corresponding checksums.
     // Default: false
     boolean verifyChecksums = false;
+
+    Long snapshot = null;
 }
