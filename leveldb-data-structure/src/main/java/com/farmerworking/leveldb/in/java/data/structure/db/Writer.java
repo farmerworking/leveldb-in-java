@@ -18,4 +18,12 @@ public class Writer {
     public Writer(Lock lock) {
         this.condition = lock.newCondition();
     }
+
+    public boolean isNotDone() {
+        return !done;
+    }
+
+    public boolean isNotSync() {
+        return !isSync();
+    }
 }

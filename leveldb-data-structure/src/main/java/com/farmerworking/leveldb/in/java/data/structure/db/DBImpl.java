@@ -8,6 +8,7 @@ import com.farmerworking.leveldb.in.java.data.structure.log.*;
 import com.farmerworking.leveldb.in.java.data.structure.memory.*;
 import com.farmerworking.leveldb.in.java.data.structure.table.TableBuilder;
 import com.farmerworking.leveldb.in.java.data.structure.version.*;
+import com.farmerworking.leveldb.in.java.data.structure.writebatch.MemTableInserter;
 import com.farmerworking.leveldb.in.java.data.structure.writebatch.WriteBatch;
 import com.farmerworking.leveldb.in.java.file.*;
 import javafx.util.Pair;
@@ -54,6 +55,7 @@ public class DBImpl implements DB {
     private long seed; // For sampling
 
     private Deque<Writer> writerList;
+    private WriteBatch tmpBatch;
 
     private LinkedList<Long> snapshots = new LinkedList<>();
     // Set of table files to protect from deletion because they are
@@ -91,6 +93,7 @@ public class DBImpl implements DB {
         this.bgCompactionScheduled = false;
         this.manualCompaction = null;
         this.writerList = new ArrayDeque<>();
+        this.tmpBatch = new WriteBatch();
 
         this.hasImmutableMemtable = new AtomicBoolean(false);
         int tableCacheSize = this.options.getMaxFileSize() - kNumNonTableCacheFiles;
@@ -195,6 +198,151 @@ public class DBImpl implements DB {
             this.mutex.unlock();
         }
     }
+
+    public Status put(WriteOptions writeOptions, String key, String value) {
+        WriteBatch batch = new WriteBatch();
+        batch.put(key, value);
+        return write(writeOptions, batch);
+    }
+
+    public Status delete(WriteOptions writeOptions, String key) {
+        WriteBatch batch = new WriteBatch();
+        batch.delete(key);
+        return write(writeOptions, batch);
+    }
+
+    public Status write(WriteOptions writeOptions, WriteBatch batch) {
+        Writer writer = new Writer(this.mutex);
+        writer.setBatch(batch);
+        writer.setSync(writeOptions.isSync());
+        writer.setDone(false);
+
+        try {
+            this.mutex.lock();
+            this.writerList.add(writer);
+            while(writer.isNotDone() && writer != this.writerList.peekFirst()) {
+                writer.getCondition().await();
+            }
+
+            if (writer.isDone()) {
+                return writer.getStatus();
+            }
+
+            // May temporarily unlock and wait.
+            Status status = makeRoomForWrite(batch == null);
+            long lastSequence = this.versions.getLastSequence();
+            Writer lastWriter = writer;
+            if (status.isOk() && batch != null) { // NULL batch is for compactions
+                Pair<WriteBatch, Writer> pair = buildBatchGroup();
+                WriteBatch updates = pair.getKey();
+                lastWriter = pair.getValue();
+                updates.setSequence(lastSequence + 1);
+                lastSequence += updates.getCount();
+
+                // Add to log and apply to memtable.  We can release the lock
+                // during this phase since &w is currently responsible for logging
+                // and protects against concurrent loggers and concurrent writes
+                // into mem_.
+                {
+                    this.mutex.unlock();
+                    status = this.log.addRecord(new String(updates.encode()));
+                    boolean syncError = false;
+                    if (status.isOk() && writeOptions.isSync()) {
+                       status = this.logFile.sync();
+                       if (status.isNotOk()) {
+                           syncError = true;
+                       }
+                    }
+                    if (status.isOk()) {
+                        status = updates.iterate(new MemTableInserter(updates.getSequence(), this.memtable));
+                    }
+                    this.mutex.lock();
+                    if (syncError) {
+                        // The state of the log file is indeterminate: the log record we
+                        // just added may or may not show up when the DB is re-opened.
+                        // So we force the DB into a mode where all future writes fail.
+                        recordBackgroundError(status);
+                    }
+                }
+
+                if (updates == tmpBatch) {
+                    tmpBatch.clear();
+                }
+
+                this.versions.setLastSequence(lastSequence);
+            }
+
+            while(true) {
+                Writer ready = this.writerList.peekFirst();
+                this.writerList.pop();
+                if (ready != writer) {
+                    ready.setStatus(status);
+                    ready.setDone(true);
+                    ready.getCondition().signal();
+                }
+
+                if (ready == lastWriter) {
+                    break;
+                }
+            }
+
+            if (!this.writerList.isEmpty()) {
+                this.writerList.peekFirst().getCondition().signal();
+            }
+
+            return status;
+        } finally {
+            this.mutex.unlock();
+        }
+    }
+
+    Pair<WriteBatch, Writer> buildBatchGroup() {
+        assert !this.writerList.isEmpty();
+        Writer first = this.writerList.peekFirst();
+        WriteBatch result = first.getBatch();
+        assert result != null;
+
+        int size = first.getBatch().approximateSize();
+        // Allow the group to grow up to a maximum size, but if the
+        // original write is small, limit the growth so we do not slow
+        // down the small write too much.
+        int maxSize = 1 << 20;
+        if (size <= (128 << 10)) {
+            maxSize = size + 128 << 10;
+        }
+
+        Writer lastWriter = first;
+        java.util.Iterator<Writer> iter = this.writerList.iterator();
+        iter.next();  // Advance past "first"
+        while(iter.hasNext()) {
+            Writer writer = iter.next();
+            if (writer.isSync() && first.isNotSync()) {
+                // Do not include a sync write into a batch handled by a non-sync write.
+                break;
+            }
+
+            if (writer.getBatch() != null) {
+                size += writer.getBatch().approximateSize();
+                if (size > maxSize) {
+                    // Do not make batch too big
+                    break;
+                }
+
+                // Append to *result
+                if (result == first.getBatch()) {
+                    // Switch to temporary batch instead of disturbing caller's batch
+                    result = tmpBatch;
+                    assert result.getCount() == 0;
+                    result.append(first.getBatch());
+                }
+
+                result.append(writer.getBatch());
+            }
+            lastWriter = writer;
+        }
+        return new Pair<>(result, lastWriter);
+    }
+
     public Status makeRoomForWrite(boolean force) {
         assert this.mutex.isHeldByCurrentThread();
         assert !this.writerList.isEmpty();

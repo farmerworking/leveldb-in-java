@@ -167,6 +167,7 @@ public class DBImplTest {
         assertTrue(db.getBgError().isOk());
         assertNotNull(db.getSnapshots());
         assertNotNull(db.getWriterList());
+        assertNotNull(db.getTmpBatch());
         for (int i = 0; i < Config.kNumLevels; i++) {
             assertNotNull(db.getStats()[i]);
         }
