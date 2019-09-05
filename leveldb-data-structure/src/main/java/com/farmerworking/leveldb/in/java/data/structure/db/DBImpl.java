@@ -221,7 +221,13 @@ public class DBImpl implements DB {
             this.mutex.lock();
             this.writerList.add(writer);
             while(writer.isNotDone() && writer != this.writerList.peekFirst()) {
-                writer.getCondition().await();
+                try {
+                    writer.getCondition().await();
+                } catch (InterruptedException e) {
+                    writer.setDone(true);
+                    writer.setStatus(Status.IOError("interrupted"));
+                    break;
+                }
             }
 
             if (writer.isDone()) {
@@ -316,6 +322,11 @@ public class DBImpl implements DB {
         iter.next();  // Advance past "first"
         while(iter.hasNext()) {
             Writer writer = iter.next();
+
+            if (writer.isDone()) {
+                continue;
+            }
+
             if (writer.isSync() && first.isNotSync()) {
                 // Do not include a sync write into a batch handled by a non-sync write.
                 break;
