@@ -302,6 +302,25 @@ public class DBImpl implements DB {
         }
     }
 
+    public long getSnapshot() {
+        try {
+            this.mutex.lock();
+            long result = this.versions.getLastSequence();
+            this.snapshots.add(result);
+            return result;
+        } finally {
+            this.mutex.unlock();
+        }
+    }
+
+    public void releaseSnapshot(long snapshot) {
+        try {
+            this.mutex.lock();
+            this.snapshots.remove(snapshot);
+        } finally {
+            this.mutex.unlock();
+        }
+    }
     Pair<WriteBatch, Writer> buildBatchGroup() {
         assert !this.writerList.isEmpty();
         Writer first = this.writerList.peekFirst();
