@@ -32,7 +32,7 @@ public class VersionTest {
         Version version = new Version(new VersionSet());
         assertEquals(0, version.numFiles(0));
 
-        Vector<Iterator> iterators = version.iterators(new ReadOptions());
+        Vector<Iterator<String, String>> iterators = version.iterators(new ReadOptions());
         assertTrue(iterators.isEmpty());
 
         Pair<Status, String> pair = version.get(new ReadOptions(), new InternalKey("a", 1L, ValueType.kTypeValue), new GetStats());
@@ -451,7 +451,7 @@ public class VersionTest {
         version.files.get(1).add(new FileMetaData(3L, builderList.get(2).fileSize(), min(internalKeyLists.get(2)), max(internalKeyLists.get(2))));
         version.files.get(1).add(new FileMetaData(4L, builderList.get(3).fileSize(), min(internalKeyLists.get(3)), max(internalKeyLists.get(3))));
 
-        Vector<Iterator> iterators = version.iterators(new ReadOptions());
+        Vector<Iterator<String, String>> iterators = version.iterators(new ReadOptions());
         assertEquals(3, iterators.size());
 
         for (int i = 0; i < 2; i++) {

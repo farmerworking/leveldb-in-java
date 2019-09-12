@@ -23,5 +23,5 @@ public class Config {
     static int kMaxMemCompactLevel = 2;
 
     // Approximate gap in bytes between samples of data read during iteration.
-    static int kReadBytesPeriod = 1048576;
+    public static int kReadBytesPeriod = 1048576;
 }

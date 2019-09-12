@@ -6,6 +6,7 @@ import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.data.structure.cache.TableCache;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKeyComparator;
+import com.farmerworking.leveldb.in.java.data.structure.memory.ParsedInternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.ValueType;
 import com.farmerworking.leveldb.in.java.data.structure.table.GetSaver;
 import com.farmerworking.leveldb.in.java.data.structure.table.GetState;
@@ -65,8 +66,8 @@ public class Version {
 
     // return a sequence of iterators that will yield the contents of this Version when merged together.
     // requires: This version has been saved
-    Vector<Iterator> iterators(ReadOptions readOptions) {
-        Vector<Iterator> iterators = new Vector<>();
+    public Vector<Iterator<String, String>> iterators(ReadOptions readOptions) {
+        Vector<Iterator<String, String>> iterators = new Vector<>();
 
         // Merge all level zero files together since they may overlap
         Vector<FileMetaData> level0 = files.get(0);
@@ -158,7 +159,16 @@ public class Version {
     // Samples are taken approximately once every config::kReadBytesPeriod
     // bytes.  Returns true if a new compaction may need to be triggered.
     // REQUIRES: lock is held
-    public boolean recordReadSample(InternalKey internalKey) {
+    public boolean recordReadSample(String key) {
+        Pair<Boolean, ParsedInternalKey> pair = InternalKey.parseInternalKey(key);
+        if (!pair.getKey()) {
+            return false;
+        }
+        InternalKey internalKey = new InternalKey(
+                pair.getValue().getUserKey(),
+                pair.getValue().getSequence(),
+                pair.getValue().getValueType());
+
         MatchObj matchObj = new MatchObj();
         forEachOverlapping(internalKey, matchObj);
         // Must have at least two matches since we want to merge across
