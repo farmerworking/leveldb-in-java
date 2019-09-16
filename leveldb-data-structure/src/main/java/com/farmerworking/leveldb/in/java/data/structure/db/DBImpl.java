@@ -321,6 +321,67 @@ public class DBImpl implements DB {
             this.mutex.unlock();
         }
     }
+
+    @Override
+    public Iterator<String, String> iterator(ReadOptions readOptions) {
+        Pair<Iterator<String, String>, Pair<Long, Long>> pair = internalIterator(readOptions);
+        return new DBIterator(this, this.internalKeyComparator.getUserComparator(), pair.getKey() ,
+            (readOptions.getSnapshot() != null ? readOptions.getSnapshot() : pair.getValue().getKey()),
+            pair.getValue().getValue());
+    }
+
+    public void recordReadSample(String key) {
+        try {
+            this.mutex.lock();
+            if (this.versions.getCurrent().recordReadSample(key)) {
+                maybeScheduleCompaction();
+            }
+        } finally {
+            this.mutex.unlock();
+        }
+    }
+
+    @Data
+    class IterState {
+        private ReentrantLock mutex;
+        private Version version;
+        private IMemtable memtable;
+        private IMemtable immutableMemtable;
+    }
+
+    private Pair<Iterator<String, String>, Pair<Long, Long>> internalIterator(ReadOptions readOptions) {
+        IterState iterState = new IterState();
+        this.mutex.lock();
+        long latestSnapshot = this.versions.getLastSequence();
+
+        // Collect together all needed child iterators
+        Vector<Iterator<String, String>> list = new Vector<>();
+        list.add(this.memtable.iterator());
+        if (this.immutableMemtable != null) {
+            list.add(this.immutableMemtable.iterator());
+        }
+        list.addAll(this.versions.getCurrent().iterators(readOptions));
+        MergingIterator internalIterator = new MergingIterator(this.internalKeyComparator, list);
+        this.versions.getCurrent().ref();
+
+        iterState.setMutex(this.mutex);
+        iterState.setMemtable(this.memtable);
+        iterState.setImmutableMemtable(this.immutableMemtable);
+        iterState.setVersion(this.versions.getCurrent());
+        internalIterator.registerCleanup(new Runnable() {
+            @Override
+            public void run() {
+                iterState.getMutex().lock();
+                iterState.getVersion().unref();
+                iterState.getMutex().unlock();
+            }
+        });
+
+        long returnSeed = ++this.seed;
+        this.mutex.unlock();
+        return new Pair<>(internalIterator, new Pair<>(latestSnapshot, returnSeed));
+    }
+
     Pair<WriteBatch, Writer> buildBatchGroup() {
         assert !this.writerList.isEmpty();
         Writer first = this.writerList.peekFirst();
