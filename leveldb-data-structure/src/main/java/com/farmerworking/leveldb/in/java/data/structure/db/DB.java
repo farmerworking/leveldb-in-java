@@ -19,6 +19,14 @@ public interface DB {
 
     Iterator<String, String> iterator(ReadOptions readOptions);
 
+    Pair<Status, String> get(ReadOptions readOptions, String key);
+
+    Status put(WriteOptions writeOptions, String key, String value);
+
+    Status delete(WriteOptions writeOptions, String key);
+
+    void close();
+
     static Pair<Status, DB> open(Options options, String dbname) {
         DBImpl db = new DBImpl(options, dbname);
         db.getMutex().lock();

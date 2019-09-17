@@ -18,7 +18,7 @@ public class Log2MemtableReader {
     private Status status;
     private LogReporter logReporter;
     private ILogReader logReader;
-    private Long maxSequence;
+    private long maxSequence;
     private boolean saveManifest;
     private int compactions;
     private Memtable memtable;
@@ -35,7 +35,7 @@ public class Log2MemtableReader {
 
         // state needed by caller
         this.status = Status.OK();
-        this.maxSequence = null;
+        this.maxSequence = 0;
         this.saveManifest = false;
         this.compactions = 0;
         this.memtable = null;
@@ -73,7 +73,7 @@ public class Log2MemtableReader {
             }
 
             long lastSeq = batch.getSequence() + batch.getCount() - 1;
-            if (maxSequence == null || lastSeq > maxSequence) {
+            if (lastSeq > maxSequence) {
                 maxSequence = lastSeq;
             }
 

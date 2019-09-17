@@ -199,6 +199,26 @@ public class DBImpl implements DB {
         }
     }
 
+    @Override
+    public void close() {
+        try {
+            this.mutex.lock();
+            this.shuttingDown.set(true);
+            while(this.bgCompactionScheduled) {
+                try {
+                    this.bgCondition.await();
+                } catch (Exception e){
+                }
+            }
+        } finally {
+            this.mutex.unlock();
+        }
+
+        if (this.dbLock != null) {
+            this.env.unlockFile(FileName.lockFileName(this.dbname), this.dbLock);
+        }
+    }
+
     public Status put(WriteOptions writeOptions, String key, String value) {
         WriteBatch batch = new WriteBatch();
         batch.put(key, value);

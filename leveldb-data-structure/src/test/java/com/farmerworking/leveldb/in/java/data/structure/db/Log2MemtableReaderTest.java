@@ -170,7 +170,7 @@ public class Log2MemtableReaderTest {
 
         spyReader.invoke();
         assertTrue(spyReader.getStatus().isOk());
-        assertEquals(100, spyReader.getMaxSequence().longValue());
+        assertEquals(100, spyReader.getMaxSequence());
         assertFalse(spyReader.isSaveManifest());
         assertEquals(0, spyReader.getCompactions());
         assertNotNull(spyReader.getMemtable());
@@ -201,7 +201,7 @@ public class Log2MemtableReaderTest {
 
         spyReader.invoke();
         assertTrue(spyReader.getStatus().isOk());
-        assertEquals(200, spyReader.getMaxSequence().longValue());
+        assertEquals(200, spyReader.getMaxSequence());
         assertTrue(spyReader.isSaveManifest());
         assertEquals(1, spyReader.getCompactions());
         assertNull(spyReader.getMemtable());
