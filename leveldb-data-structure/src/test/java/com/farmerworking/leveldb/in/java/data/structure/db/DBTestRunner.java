@@ -71,4 +71,76 @@ public class DBTestRunner {
             dbTest.env.delayDataSync.set(false);
         } while(dbTest.changeOptions());
     }
+
+    @Test
+    public void testGetFromVersions() {
+        do {
+            assertTrue(dbTest.put("foo", "v1").isOk());
+            ((DBImpl)dbTest.db).TEST_compactMemtable();
+            assertEquals("v1", dbTest.get("foo"));
+        } while (dbTest.changeOptions());
+    }
+
+    @Test
+    public void testGetSnapshot() {
+        do {
+            // Try with both a short key and a long key
+            for (int i = 0; i < 2; i++) {
+                String key = i == 0 ? "foo" : StringUtils.repeat('x', 200);
+                assertTrue(dbTest.put(key, "v1").isOk());
+                long snapshot = dbTest.db.getSnapshot();
+                assertTrue(dbTest.put(key, "v2").isOk());
+                assertEquals("v2", dbTest.get(key));
+                assertEquals("v1", dbTest.get(key, snapshot));
+                ((DBImpl) dbTest.db).TEST_compactMemtable();
+                assertEquals("v2", dbTest.get(key));
+                assertEquals("v1", dbTest.get(key, snapshot));
+                ((DBImpl)dbTest.db).releaseSnapshot(snapshot);
+            }
+        } while (dbTest.changeOptions());
+    }
+
+    @Test
+    public void testGetLevel0Ordering() {
+        do {
+            // Check that we process level-0 files in correct order.  The code
+            // below generates two level-0 files where the earlier one comes
+            // before the later one in the level-0 file list since the earlier
+            // one has a smaller "smallest" key.
+            assertTrue(dbTest.put("bar", "b").isOk());
+            assertTrue(dbTest.put("foo", "v1").isOk());
+            ((DBImpl) dbTest.db).TEST_compactMemtable();
+            assertTrue(dbTest.put("foo", "v2").isOk());
+            ((DBImpl) dbTest.db).TEST_compactMemtable();
+            assertEquals("v2", dbTest.get("foo"));
+        } while (dbTest.changeOptions());
+    }
+
+    @Test
+    public void testGetOrderedByLevels() {
+        do {
+            assertTrue(dbTest.put("foo", "v1").isOk());
+            dbTest.db.compactRange("a", "z");
+            assertEquals("v1", dbTest.get("foo"));
+            assertTrue(dbTest.put("foo", "v2").isOk());
+            assertEquals("v2", dbTest.get("foo"));
+            ((DBImpl) dbTest.db).TEST_compactMemtable();
+            assertEquals("v2", dbTest.get("foo"));
+        } while (dbTest.changeOptions());
+    }
+
+    @Test
+    public void testPicksCorrectFile() {
+        do {
+            assertTrue(dbTest.put("a", "va").isOk());
+            dbTest.db.compactRange("a", "b");
+            assertTrue(dbTest.put("x", "vx").isOk());
+            dbTest.db.compactRange("x", "y");
+            assertTrue(dbTest.put("f", "vf").isOk());
+            dbTest.db.compactRange("f", "g");
+            assertEquals("va", dbTest.get("a"));
+            assertEquals("vf", dbTest.get("f"));
+            assertEquals("vx", dbTest.get("x"));
+        } while (dbTest.changeOptions());
+    }
 }

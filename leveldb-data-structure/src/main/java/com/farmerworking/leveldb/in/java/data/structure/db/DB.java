@@ -25,6 +25,10 @@ public interface DB {
 
     Status delete(WriteOptions writeOptions, String key);
 
+    long getSnapshot();
+
+    void compactRange(String begin, String end);
+
     void close();
 
     static Pair<Status, DB> open(Options options, String dbname) {

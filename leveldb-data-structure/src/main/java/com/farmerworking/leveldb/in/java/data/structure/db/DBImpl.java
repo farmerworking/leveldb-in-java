@@ -454,6 +454,29 @@ public class DBImpl implements DB {
         return new Pair<>(result, lastWriter);
     }
 
+    public Status TEST_compactMemtable() {
+       Status s = write(new WriteOptions(), null);
+       if (s.isOk()) {
+           try {
+               this.mutex.lock();
+               while(this.immutableMemtable != null && bgError.isOk()) {
+                   try {
+                       bgCondition.await();
+                   } catch (InterruptedException e) {
+                   }
+               }
+
+               if (this.immutableMemtable != null) {
+                   s = bgError;
+               }
+           } finally {
+               this.mutex.unlock();
+           }
+       }
+
+       return s;
+    }
+
     public Status makeRoomForWrite(boolean force) {
         assert this.mutex.isHeldByCurrentThread();
         assert !this.writerList.isEmpty();
@@ -1092,6 +1115,68 @@ public class DBImpl implements DB {
         }
 
         return new Pair<>(compaction, manualEnd);
+    }
+
+    public void compactRange(String begin, String end) {
+        int maxLevelWithFiles = 1;
+        try {
+            this.mutex.lock();
+            Version base = this.versions.getCurrent();
+            for (int level = 0; level < Config.kNumLevels; level++) {
+                if (base.overlapInLevel(level, begin, end)) {
+                    maxLevelWithFiles = level;
+                }
+            }
+        } finally {
+            this.mutex.unlock();
+        }
+        this.TEST_compactMemtable();
+        for (int level = 0; level < maxLevelWithFiles; level++) {
+            this.TEST_compactRange(level, begin, end);
+        }
+    }
+
+    void TEST_compactRange(int level, String begin, String end) {
+        assert level >= 0;
+        assert level + 1 < Config.kNumLevels;
+
+        ManualCompaction manual = new ManualCompaction();
+        manual.setLevel(level);
+        manual.setDone(false);
+        if (begin == null) {
+            manual.setBegin(null);
+        } else {
+            manual.setBegin(new InternalKey(begin, InternalKey.kMaxSequenceNumber, ValueType.kValueTypeForSeek));
+        }
+
+        if (end == null) {
+            manual.setEnd(null);
+        } else {
+            manual.setEnd(new InternalKey(begin, 0, ValueType.kTypeDeletion));
+        }
+
+        try {
+            this.mutex.lock();
+            while (!manual.isDone() && !this.shuttingDown.get() && this.bgError.isOk()) {
+                if (this.manualCompaction == null) { // idle
+                    this.manualCompaction = manual;
+                    maybeScheduleCompaction();
+                } else {
+                    // Running either my compaction or another compaction.
+                    try {
+                        bgCondition.await();
+                    } catch (InterruptedException e) {
+                    }
+                }
+            }
+
+            if (this.manualCompaction == manual) {
+                // Cancel my manual compaction since we aborted early for some reason.
+                this.manualCompaction = null;
+            }
+        } finally {
+            this.mutex.unlock();
+        }
     }
 
     Status doCompactionWork(CompactionState compact) {

@@ -315,7 +315,12 @@ public class DBTest {
     }
 
     String get(String key) {
+        return get(key, null);
+    }
+
+    String get(String key, Long snapshot) {
         ReadOptions readOptions = new ReadOptions();
+        readOptions.setSnapshot(snapshot);
         Pair<Status, String> pair = this.db.get(readOptions, key);
         String result = pair.getValue();
         if (pair.getKey().isNotFound()) {
