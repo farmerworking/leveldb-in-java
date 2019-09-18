@@ -346,7 +346,9 @@ public class Version {
                 return new ArrayList<>();
             } else {
                 FileMetaData fileMetaData = filesInLevel.get(index);
-                if (internalKeyComparator.compare(internalKey, fileMetaData.getSmallest()) < 0) {
+                if (internalKeyComparator.getUserComparator().compare(
+                    internalKey.userKey().toCharArray(),
+                    fileMetaData.getSmallest().userKey().toCharArray()) < 0) {
                     return new ArrayList<>();
                 } else {
                     return Lists.newArrayList(fileMetaData);
