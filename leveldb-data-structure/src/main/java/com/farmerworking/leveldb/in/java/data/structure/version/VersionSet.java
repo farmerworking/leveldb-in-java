@@ -424,6 +424,7 @@ public class VersionSet {
         }
 
         compaction.inputVersion = current;
+        compaction.inputVersion.ref();
 
         // Files in level 0 may overlap each other, so pick up all overlapping ones
         if (level == 0) {
@@ -467,6 +468,7 @@ public class VersionSet {
 
         Compaction compaction = new Compaction(this.options, level);
         compaction.inputVersion = current;
+        compaction.inputVersion.ref();
         compaction.inputs[0] = inputs;
         setupOtherInputs(compaction);
         return compaction;
