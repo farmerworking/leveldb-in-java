@@ -97,11 +97,11 @@ public class Version {
         stats.setSeekFileLevel(-1);
         stats.setSeekFile(null);
 
+        FileMetaData lastFileRead = null;
+        Integer lastFileReadLevel = null;
         for (int level = 0; level < Config.kNumLevels; level++) {
             Collection<FileMetaData> filesToSearch = getFilesToSearchForLevel(level, internalKey);
 
-            FileMetaData lastFileRead = null;
-            Integer lastFileReadLevel = null;
             for (FileMetaData fileMetaData : filesToSearch) {
                 if (lastFileRead != null && stats.getSeekFile() == null) {
                     // We have had more than one seek for this read.  Charge the 1st file.
