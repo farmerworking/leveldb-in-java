@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.farmerworking.leveldb.in.java.api.CompressionType;
 import com.farmerworking.leveldb.in.java.api.FilterPolicy;
+import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.Options.Logger;
 import com.farmerworking.leveldb.in.java.api.ReadOptions;
@@ -334,5 +335,23 @@ public class DBTest {
 
     Status put(String key, String value) {
         return this.db.put(new WriteOptions(), key, value);
+    }
+
+    String iterStatus(Iterator iterator) {
+        String result;
+
+        if (iterator.valid()) {
+            result = iterator.key().toString() + "->" + iterator.value().toString();
+        } else {
+            result = "(invalid)";
+        }
+
+        return result;
+    }
+
+    int numTableFilesAtLevel(int level) {
+        Pair<Boolean, String> pair = db.getProperty("leveldb.num-files-at-level" + level);
+        assertTrue(pair.getKey());
+        return Integer.valueOf(pair.getValue());
     }
 }

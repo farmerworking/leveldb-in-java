@@ -25,11 +25,15 @@ public interface DB {
 
     Status delete(WriteOptions writeOptions, String key);
 
+    Pair<Boolean, String> getProperty(String property);
+
     long getSnapshot();
 
     void compactRange(String begin, String end);
 
     void close();
+
+    void TEST_compactRange(int level, String begin, String end);
 
     static Pair<Status, DB> open(Options options, String dbname) {
         DBImpl db = new DBImpl(options, dbname);

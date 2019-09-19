@@ -1,7 +1,11 @@
 package com.farmerworking.leveldb.in.java.data.structure.db;
 
+import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.api.Options;
+import com.farmerworking.leveldb.in.java.api.ReadOptions;
+import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.api.WriteOptions;
+import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.After;
 import org.junit.Before;
@@ -82,6 +86,18 @@ public class DBTestRunner {
     }
 
     @Test
+    public void testGetMemUsage() {
+        do {
+            assertTrue(dbTest.put("foo", "v1").isOk());
+            Pair<Boolean, String> pair = dbTest.db.getProperty("leveldb.approximate-memory-usage");
+            assertTrue(pair.getKey());
+            Integer usage = Integer.valueOf(pair.getValue());
+            assertTrue(usage > 0);
+            assertTrue(usage < 5 * 1024 * 1024);
+        } while (dbTest.changeOptions());
+    }
+
+    @Test
     public void testGetSnapshot() {
         do {
             // Try with both a short key and a long key
@@ -142,5 +158,60 @@ public class DBTestRunner {
             assertEquals("vf", dbTest.get("f"));
             assertEquals("vx", dbTest.get("x"));
         } while (dbTest.changeOptions());
+    }
+
+    @Test
+    public void testGetEncountersEmptyLevel() {
+        do {
+            // Arrange for the following to happen:
+            //   * sstable A in level 0
+            //   * nothing in level 1
+            //   * sstable B in level 2
+            // Then do enough Get() calls to arrange for an automatic compaction
+            // of sstable A.  A bug would cause the compaction to be marked as
+            // occurring at level 1 (instead of the correct level 0).
+
+            // Step 1: First place sstables in levels 0 and 2
+            int compactionCount = 0;
+            while(dbTest.numTableFilesAtLevel(0) == 0 || dbTest.numTableFilesAtLevel(2) == 0) {
+                assertTrue("could not fill levels 0 and 2", compactionCount < 100);
+                compactionCount ++;
+                dbTest.put("a", "begin");
+                dbTest.put("z", "end");
+                ((DBImpl) dbTest.db).TEST_compactMemtable();
+            }
+
+            // Step 2: clear level 1 if necessary.
+            dbTest.db.TEST_compactRange(1, null, null);
+            assertEquals(dbTest.numTableFilesAtLevel(0), 1);
+            assertEquals(dbTest.numTableFilesAtLevel(1), 0);
+            assertEquals(dbTest.numTableFilesAtLevel(2), 1);
+
+            // Step 3: read a bunch of times
+            for (int i = 0; i < 1000; i++) {
+                assertEquals("NOT_FOUND", dbTest.get("missing"));
+            }
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+            }
+
+            assertEquals(dbTest.numTableFilesAtLevel(0), 0);
+        } while (dbTest.changeOptions());
+    }
+
+    @Test
+    public void testIterEmpty() {
+        Iterator<String, String> iter = dbTest.db.iterator(new ReadOptions());
+
+        iter.seekToFirst();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+
+        iter.seekToLast();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+
+        iter.seek("foo");
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
     }
 }

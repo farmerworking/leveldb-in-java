@@ -231,6 +231,52 @@ public class DBImpl implements DB {
         return write(writeOptions, batch);
     }
 
+    @Override
+    public Pair<Boolean, String> getProperty(String property) {
+        try {
+            this.mutex.lock();
+            String prefix = "leveldb.";
+            if (!property.startsWith(prefix)) {
+                return new Pair<>(false, null);
+            }
+            String suffix = property.substring(prefix.length(), property.length());
+
+            if (suffix.equals("approximate-memory-usage")) {
+                int totalUsage = options.getBlockCache().totalCharge();
+                if (this.memtable != null) {
+                    totalUsage += this.memtable.approximateMemoryUsage();
+                }
+
+                if (this.immutableMemtable != null) {
+                    totalUsage += this.immutableMemtable.approximateMemoryUsage();
+                }
+
+                return new Pair<>(true, String.valueOf(totalUsage));
+            }
+
+            if (suffix.startsWith("num-files-at-level")) {
+                suffix = suffix.substring("num-files-at-level".length(), suffix.length());
+                boolean ok = true;
+                Integer level = null;
+                try {
+                    level = Integer.parseInt(suffix);
+                } catch (NumberFormatException e) {
+                    ok = false;
+                }
+
+                if (!ok || level > Config.kNumLevels) {
+                    return new Pair<>(false, null);
+                } else {
+                    return new Pair<>(true, String.valueOf(this.versions.numLevelFiles(level)));
+                }
+            }
+
+            return new Pair<>(false, null);
+        } finally {
+            this.mutex.unlock();
+        }
+    }
+
     public Status write(WriteOptions writeOptions, WriteBatch batch) {
         Writer writer = new Writer(this.mutex);
         writer.setBatch(batch);
@@ -1136,7 +1182,7 @@ public class DBImpl implements DB {
         }
     }
 
-    void TEST_compactRange(int level, String begin, String end) {
+    public void TEST_compactRange(int level, String begin, String end) {
         assert level >= 0;
         assert level + 1 < Config.kNumLevels;
 
