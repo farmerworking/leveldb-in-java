@@ -208,7 +208,7 @@ public class Log2MemtableReaderTest {
     }
 
     void verifyReaderDefaultState(Log2MemtableReader spyReader) {
-        assertNull(spyReader.getMaxSequence());
+        assertEquals(spyReader.getMaxSequence(), 0);
         assertFalse(spyReader.isSaveManifest());
         assertEquals(0, spyReader.getCompactions());
         assertNull(spyReader.getMemtable());
