@@ -110,9 +110,9 @@ public class VersionTest {
 
         assertEquals(1, version.files.get(0).size());
         assertEquals(1, version.getFilesToSearchForLevel(0, new InternalKey("a", 100L)).size());
-        assertEquals(0, version.getFilesToSearchForLevel(0, new InternalKey("a", 101L)).size());
+        assertEquals(1, version.getFilesToSearchForLevel(0, new InternalKey("a", 101L)).size());
         assertEquals(1, version.getFilesToSearchForLevel(0, new InternalKey("g", 200L)).size());
-        assertEquals(0, version.getFilesToSearchForLevel(0, new InternalKey("g", 199L)).size());
+        assertEquals(1, version.getFilesToSearchForLevel(0, new InternalKey("g", 199L)).size());
 
         assertEquals(1, version.files.get(1).size());
         assertEquals(1, version.getFilesToSearchForLevel(1, new InternalKey("a", 100L)).size());

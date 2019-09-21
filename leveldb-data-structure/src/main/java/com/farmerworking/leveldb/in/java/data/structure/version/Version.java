@@ -326,10 +326,11 @@ public class Version {
             for (int i = 0; i < fileNums; i++) {
                 FileMetaData metaData = filesInLevel.get(i);
 
-                if (this.internalKeyComparator.compare(internalKey, metaData.getSmallest()) >= 0 &&
-                        this.internalKeyComparator.compare(internalKey, metaData.getLargest()) <= 0) {
+                if (internalKeyComparator.getUserComparator().
+                    compare(internalKey.userKey().toCharArray(), metaData.getSmallest().userKey().toCharArray()) >= 0 &&
+                    internalKeyComparator.getUserComparator().
+                        compare(internalKey.userKey().toCharArray(), metaData.getLargest().userKey().toCharArray()) <= 0) {
                     result.add(metaData);
-
                 }
             }
 
