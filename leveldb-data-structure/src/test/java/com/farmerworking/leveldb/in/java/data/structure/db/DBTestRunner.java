@@ -387,4 +387,64 @@ public class DBTestRunner {
             assertEquals(dbTest.iterStatus(iter), "a->va");
         } while (dbTest.changeOptions());
     }
+
+    @Test
+    public void testRecover() {
+        do {
+            assertTrue(dbTest.put("foo", "v1").isOk());
+            assertTrue(dbTest.put("baz", "v5").isOk());
+
+            dbTest.reopen();
+            assertEquals("v1", dbTest.get("foo"));
+            assertEquals("v5", dbTest.get("baz"));
+
+            assertTrue(dbTest.put("bar", "v2").isOk());
+            assertTrue(dbTest.put("foo", "v3").isOk());
+
+            dbTest.reopen();
+            assertEquals("v3", dbTest.get("foo"));
+            assertTrue(dbTest.put("foo", "v4").isOk());
+            assertEquals("v4", dbTest.get("foo"));
+            assertEquals("v2", dbTest.get("bar"));
+            assertEquals("v5", dbTest.get("baz"));
+        } while (dbTest.changeOptions());
+    }
+
+    @Test
+    public void testRecoveryWithEmptyLog() {
+        do {
+            assertTrue(dbTest.put("foo", "v1").isOk());
+            assertTrue(dbTest.put("foo", "v2").isOk());
+            dbTest.reopen();
+            dbTest.reopen(); // no log
+            assertTrue(dbTest.put("foo", "v3").isOk());
+            dbTest.reopen();
+            assertEquals("v3", dbTest.get("foo"));
+        } while (dbTest.changeOptions());
+    }
+
+    // Check that writes done during a memtable compaction are recovered
+    // if the database is shutdown during the memtable compaction.
+    @Test
+    public void testRecoverDuringMemtableCompaction() {
+        do {
+            Options options = dbTest.currentOptions();
+            options.setEnv(dbTest.env);
+            options.setWriteBufferSize(1000000);
+            dbTest.reopen(options);
+
+            // Trigger a long memtable compaction and reopen the database during it
+            assertTrue(dbTest.put("foo", "v1").isOk()); // Goes to 1st log file
+            assertTrue(dbTest.put("big1", StringUtils.repeat('x', 10000000)).isOk()); // Fills memtable
+            assertTrue(dbTest.put("big2", StringUtils.repeat('y', 1000)).isOk()); // Triggers compaction
+            assertTrue(dbTest.put("bar", "v2").isOk()); // Goes to new log file
+
+            dbTest.reopen(options);
+            assertEquals("v1", dbTest.get("foo"));
+            assertEquals("v2", dbTest.get("bar"));
+            assertEquals(StringUtils.repeat('x', 10000000), dbTest.get("big1"));
+            assertEquals(StringUtils.repeat('y', 1000), dbTest.get("big2"));
+        } while (dbTest.changeOptions());
+
+    }
 }
