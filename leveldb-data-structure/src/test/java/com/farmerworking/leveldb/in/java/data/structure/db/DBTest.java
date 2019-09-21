@@ -337,6 +337,10 @@ public class DBTest {
         return this.db.put(new WriteOptions(), key, value);
     }
 
+    Status delete(String key) {
+        return this.db.delete(new WriteOptions(), key);
+    }
+
     String iterStatus(Iterator iterator) {
         String result;
 

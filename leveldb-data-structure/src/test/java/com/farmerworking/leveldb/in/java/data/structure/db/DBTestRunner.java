@@ -214,4 +214,177 @@ public class DBTestRunner {
         iter.seek("foo");
         assertEquals(dbTest.iterStatus(iter), "(invalid)");
     }
+
+    @Test
+    public void testIterSingle() {
+        assertTrue(dbTest.put("a", "va").isOk());
+        Iterator<String, String> iter = dbTest.db.iterator(new ReadOptions());
+
+        iter.seekToFirst();
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+        iter.seekToFirst();
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+
+        iter.seekToLast();
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+        iter.seekToLast();
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+
+        iter.seek("");
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+
+        iter.seek("a");
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+
+        iter.seek("b");
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+    }
+
+    @Test
+    public void testIterMulti() {
+        assertTrue(dbTest.put("a", "va").isOk());
+        assertTrue(dbTest.put("b", "vb").isOk());
+        assertTrue(dbTest.put("c", "vc").isOk());
+        Iterator<String, String> iter = dbTest.db.iterator(new ReadOptions());
+
+        iter.seekToFirst();
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "b->vb");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "c->vc");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+        iter.seekToFirst();
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+
+        iter.seekToLast();
+        assertEquals(dbTest.iterStatus(iter), "c->vc");
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "b->vb");
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+        iter.seekToLast();
+        assertEquals(dbTest.iterStatus(iter), "c->vc");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+
+        iter.seek("");
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.seek("a");
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.seek("ax");
+        assertEquals(dbTest.iterStatus(iter), "b->vb");
+        iter.seek("b");
+        assertEquals(dbTest.iterStatus(iter), "b->vb");
+        iter.seek("z");
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+
+        // Switch from reverse to forward
+        iter.seekToLast();
+        iter.prev();
+        iter.prev();
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "b->vb");
+
+        // Switch from forward to reverse
+        iter.seekToFirst();
+        iter.next();
+        iter.next();
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "b->vb");
+
+        // Make sure iter stays at snapshot
+        assertTrue(dbTest.put("a", "va2").isOk());
+        assertTrue(dbTest.put("a2", "va3").isOk());
+        assertTrue(dbTest.put("b", "vb2").isOk());
+        assertTrue(dbTest.put("c", "vc2").isOk());
+        assertTrue(dbTest.delete("b").isOk());
+        iter.seekToFirst();
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "b->vb");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "c->vc");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+        iter.seekToLast();
+        assertEquals(dbTest.iterStatus(iter), "c->vc");
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "b->vb");
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+    }
+
+    @Test
+    public void iterSmallAndLargeMix() {
+        assertTrue(dbTest.put("a", "va").isOk());
+        assertTrue(dbTest.put("b", StringUtils.repeat('b', 100000)).isOk());
+        assertTrue(dbTest.put("c", "vc").isOk());
+        assertTrue(dbTest.put("d", StringUtils.repeat('d', 100000)).isOk());
+        assertTrue(dbTest.put("e", StringUtils.repeat('e', 100000)).isOk());
+
+        Iterator<String, String> iter = dbTest.db.iterator(new ReadOptions());
+
+        iter.seekToFirst();
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "b->" + StringUtils.repeat('b', 100000));
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "c->vc");
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "d->" + StringUtils.repeat('d', 100000));
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "e->" + StringUtils.repeat('e', 100000));
+        iter.next();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+
+        iter.seekToLast();
+        assertEquals(dbTest.iterStatus(iter), "e->" + StringUtils.repeat('e', 100000));
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "d->" + StringUtils.repeat('d', 100000));
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "c->vc");
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "b->" + StringUtils.repeat('b', 100000));
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "a->va");
+        iter.prev();
+        assertEquals(dbTest.iterStatus(iter), "(invalid)");
+    }
+
+    @Test
+    public void testIterMultiWithDelete() {
+        do {
+            assertTrue(dbTest.put("a", "va").isOk());
+            assertTrue(dbTest.put("b", "vb").isOk());
+            assertTrue(dbTest.put("c", "vc").isOk());
+            assertTrue(dbTest.delete("b").isOk());
+            assertEquals("NOT_FOUND", dbTest.get("b"));
+
+            Iterator<String, String> iter = dbTest.db.iterator(new ReadOptions());
+            iter.seek("c");
+            assertEquals(dbTest.iterStatus(iter), "c->vc");
+            iter.prev();
+            assertEquals(dbTest.iterStatus(iter), "a->va");
+        } while (dbTest.changeOptions());
+    }
 }
