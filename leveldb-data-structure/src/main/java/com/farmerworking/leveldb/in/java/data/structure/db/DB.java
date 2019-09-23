@@ -27,13 +27,19 @@ public interface DB {
 
     Pair<Boolean, String> getProperty(String property);
 
+    int numLevelFiles(int level);
+
     long getSnapshot();
 
     void compactRange(String begin, String end);
 
     void close();
 
+    Status TEST_compactMemtable();
+
     void TEST_compactRange(int level, String begin, String end);
+
+    long TEST_maxNextLevelOverlappingBytes();
 
     static Pair<Status, DB> open(Options options, String dbname) {
         DBImpl db = new DBImpl(options, dbname);

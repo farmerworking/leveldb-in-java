@@ -500,6 +500,15 @@ public class DBImpl implements DB {
         return new Pair<>(result, lastWriter);
     }
 
+    public long TEST_maxNextLevelOverlappingBytes() {
+        try {
+            this.mutex.lock();
+            return this.versions.maxNextLevelOverlappingBytes();
+        } finally {
+            this.mutex.unlock();
+        }
+    }
+
     public Status TEST_compactMemtable() {
        Status s = write(new WriteOptions(), null);
        if (s.isOk()) {
@@ -1265,7 +1274,7 @@ public class DBImpl implements DB {
         return status;
     }
 
-    int numLevelFiles(int level) {
+    public int numLevelFiles(int level) {
         return this.versions.numLevelFiles(level);
     }
 

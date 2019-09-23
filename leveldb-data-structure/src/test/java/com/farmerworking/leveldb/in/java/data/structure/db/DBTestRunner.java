@@ -1,10 +1,16 @@
 package com.farmerworking.leveldb.in.java.data.structure.db;
 
+import java.util.Random;
+import java.util.Vector;
+
+import com.farmerworking.leveldb.in.java.api.CompressionType;
 import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.ReadOptions;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.api.WriteOptions;
+import com.farmerworking.leveldb.in.java.common.TestUtils;
+import com.farmerworking.leveldb.in.java.data.structure.version.Config;
 import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.After;
@@ -446,5 +452,163 @@ public class DBTestRunner {
             assertEquals(StringUtils.repeat('y', 1000), dbTest.get("big2"));
         } while (dbTest.changeOptions());
 
+    }
+
+    private String key(int i) {
+        return "key" + i;
+    }
+
+    private int totalTableFiles() {
+        int result = 0;
+        for (int i = 0; i < Config.kNumLevels; i++) {
+            result += dbTest.db.numLevelFiles(i);
+        }
+        return result;
+    }
+
+    @Test
+    public void testMinorCompactionsHappen() {
+        Options options = dbTest.currentOptions();
+        options.setWriteBufferSize(10000);
+        dbTest.reopen(options);
+
+        int N = 500;
+        int startTablesNum = totalTableFiles();
+        for (int i = 0; i < N; i++) {
+            assertTrue(dbTest.put(key(i), key(i) + StringUtils.repeat('v', 1000)).isOk());
+        }
+        int endTablesNum = totalTableFiles();
+        assertTrue(endTablesNum > startTablesNum);
+
+        for (int i = 0; i < N; i++) {
+            assertEquals(key(i) + StringUtils.repeat('v', 1000), dbTest.get(key(i)));
+        }
+
+        dbTest.reopen();
+
+        for (int i = 0; i < N; i++) {
+            assertEquals(key(i) + StringUtils.repeat('v', 1000), dbTest.get(key(i)));
+        }
+    }
+
+    @Test
+    public void testRecoverWithLargeLog() {
+        Options options = dbTest.currentOptions();
+        dbTest.reopen(options);
+        assertTrue(dbTest.put("big1", StringUtils.repeat('1', 200000)).isOk());
+        assertTrue(dbTest.put("big2", StringUtils.repeat('2', 200000)).isOk());
+        assertTrue(dbTest.put("small3", StringUtils.repeat('3', 10)).isOk());
+        assertTrue(dbTest.put("small4", StringUtils.repeat('4', 10)).isOk());
+        assertEquals(dbTest.db.numLevelFiles(0), 0);
+
+        // Make sure that if we re-open with a small write buffer size that
+        // we flush table files in the middle of a large log file.
+        Options options1 = dbTest.currentOptions();
+        options1.setWriteBufferSize(100000);
+        dbTest.reopen(options1);
+
+        assertEquals(dbTest.get("big1"), StringUtils.repeat('1', 200000));
+        assertEquals(dbTest.get("big2"), StringUtils.repeat('2', 200000));
+        assertEquals(dbTest.get("small3"), StringUtils.repeat('3', 10));
+        assertEquals(dbTest.get("small4"), StringUtils.repeat('4', 10));
+        assertEquals(dbTest.db.numLevelFiles(0), 3);
+    }
+
+    @Test
+    public void testCompactionGenerateMultipleFiles() {
+        Options options = dbTest.currentOptions();
+        options.setWriteBufferSize(100000000);
+        dbTest.reopen(options);
+
+        Random random = new Random();
+
+        // Write 8MB (80 values, each 100K)
+        assertEquals(dbTest.db.numLevelFiles(0), 0);
+        Vector<String> values = new Vector<>();
+        for (int i = 0; i < 80; i++) {
+            values.add(TestUtils.randomString(100000));
+            assertTrue(dbTest.put(key(i), values.get(i)).isOk());
+        }
+
+        // Reopening moves updates to level-0
+        dbTest.reopen(options);
+        dbTest.db.TEST_compactRange(0, null, null);
+
+        assertEquals(dbTest.db.numLevelFiles(0), 0);
+        assertTrue(dbTest.db.numLevelFiles(1) > 1);
+
+        for (int i = 0; i < 80; i++) {
+            assertEquals(dbTest.get(key(i)), values.get(i));
+        }
+    }
+
+    @Test
+    public void testRepeatedWritesToSameKey() {
+        Options options = dbTest.currentOptions();
+        options.setEnv(dbTest.env);
+        options.setWriteBufferSize(100000); // Small write buffer
+        dbTest.reopen(options);
+
+        // We must have at most one file per level except for level-0,
+        // which may have up to kL0_StopWritesTrigger files.
+        int maxFiles = Config.kNumLevels + Config.kL0_StopWritesTrigger;
+        String value = TestUtils.randomString(2 * options.getWriteBufferSize());
+        for (int i = 0; i < 5 * maxFiles; i++) {
+            assertTrue(dbTest.put("key", value).isOk());
+            assertTrue(totalTableFiles() < maxFiles);
+            System.out.println(String.format("after %d: %d files", i + 1, totalTableFiles()));
+        }
+    }
+
+    private void makeTables(int n, String smallest, String largest) {
+        for (int i = 0; i < n; i++) {
+            dbTest.put(smallest, "begin");
+            dbTest.put(largest, "end");
+            dbTest.db.TEST_compactMemtable();
+        }
+    }
+
+    // Prevent pushing of new sstables into deeper levels by addin
+    // tables that cover a specified range to all levels
+    private void fillLevels(String smallest, String largest) {
+        makeTables(Config.kNumLevels, smallest, largest);
+    }
+
+    @Test
+    public void testSparseMerge() {
+        Options options = dbTest.currentOptions();
+        options.setCompression(CompressionType.kNoCompression);
+        dbTest.reopen(options);
+
+        fillLevels("A", "Z");
+        
+        // Suppose there is:
+        //    small amount of data with prefix A
+        //    large amount of data with prefix B
+        //    small amount of data with prefix C
+        // and that recent updates have made small changes to all three prefixes.
+        // Check that we do not do a compaction that merges all of B in one shot.
+        String value = StringUtils.repeat('x', 1000);
+        dbTest.put("A", "va");
+        for (int i = 0; i < 100000; i++) {
+            dbTest.put("B" + i, value);
+        }
+        dbTest.put("C", "vc");
+        dbTest.db.TEST_compactMemtable();
+        dbTest.db.TEST_compactRange(0, null, null);
+
+        // Make sparse update
+        dbTest.put("A",    "va2");
+        dbTest.put("B100", "bvalue2");
+        dbTest.put("C",    "vc2");
+        dbTest.db.TEST_compactMemtable();
+
+        // Compactions should not cause us to create a situation where
+        // a file overlaps too much data at the next level.
+        assertTrue(dbTest.db.TEST_maxNextLevelOverlappingBytes() <= 20*1048576);
+        dbTest.db.TEST_compactRange(0, null, null);
+        assertTrue(dbTest.db.TEST_maxNextLevelOverlappingBytes() <= 20*1048576);
+        dbTest.db.TEST_compactRange(1, null, null);
+        assertTrue(dbTest.db.TEST_maxNextLevelOverlappingBytes() <= 20*1048576);
     }
 }
