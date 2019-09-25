@@ -31,6 +31,8 @@ public interface DB {
 
     long getSnapshot();
 
+    void releaseSnapshot(long snapshot);
+
     void compactRange(String begin, String end);
 
     void close();
@@ -40,6 +42,8 @@ public interface DB {
     void TEST_compactRange(int level, String begin, String end);
 
     long TEST_maxNextLevelOverlappingBytes();
+
+    List<Long> getApproximateSizes(List<Pair<String, String>> range, int n);
 
     static Pair<Status, DB> open(Options options, String dbname) {
         DBImpl db = new DBImpl(options, dbname);

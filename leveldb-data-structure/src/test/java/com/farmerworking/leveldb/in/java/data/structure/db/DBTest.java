@@ -255,7 +255,7 @@ public class DBTest {
         }
     }
 
-    private void destroyAndReopon() {
+    public void destroyAndReopon() {
         destroy();
         assertTrue(tryReopen().isOk());
     }

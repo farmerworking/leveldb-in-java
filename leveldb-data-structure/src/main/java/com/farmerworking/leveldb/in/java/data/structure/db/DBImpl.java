@@ -1388,6 +1388,35 @@ public class DBImpl implements DB {
         return new Pair<>(status, immutableMemtableMicros);
     }
 
+    public List<Long> getApproximateSizes(List<Pair<String, String>> range, int n) {
+        Version version;
+        try {
+            this.mutex.lock();
+            version = this.versions.getCurrent();
+            version.ref();
+        } finally {
+            this.mutex.unlock();
+        }
+
+        List<Long> result = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            InternalKey k1 = new InternalKey(range.get(i).getKey(), InternalKey.kMaxSequenceNumber, ValueType.kValueTypeForSeek);
+            InternalKey k2 = new InternalKey(range.get(i).getValue(), InternalKey.kMaxSequenceNumber, ValueType.kValueTypeForSeek);
+            long start = this.versions.approximateOffsetOf(version, k1);
+            long limit = this.versions.approximateOffsetOf(version, k2);
+            result.add(limit >= start ? limit - start : 0);
+        }
+
+        try {
+            this.mutex.lock();
+            version.unref();
+        } finally {
+            this.mutex.unlock();
+        }
+
+        return result;
+    }
+
     boolean isBigEnough(CompactionState compact) {
         return compact.getBuilder().fileSize() >= compact.getCompaction().maxOutputFileSize();
     }

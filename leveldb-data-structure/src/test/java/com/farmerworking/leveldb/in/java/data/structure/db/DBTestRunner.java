@@ -1,5 +1,6 @@
 package com.farmerworking.leveldb.in.java.data.structure.db;
 
+import java.util.List;
 import java.util.Random;
 import java.util.Vector;
 
@@ -7,10 +8,10 @@ import com.farmerworking.leveldb.in.java.api.CompressionType;
 import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.ReadOptions;
-import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.api.WriteOptions;
 import com.farmerworking.leveldb.in.java.common.TestUtils;
 import com.farmerworking.leveldb.in.java.data.structure.version.Config;
+import com.google.common.collect.Lists;
 import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.After;
@@ -455,7 +456,14 @@ public class DBTestRunner {
     }
 
     private String key(int i) {
-        return "key" + i;
+        String s = String.valueOf(i);
+        if (s.length() < 6) {
+            s = StringUtils.repeat('0', 6 - s.length()) + s;
+        } else if (s.length() > 6) {
+            s.substring(s.length() - 6, s.length());
+        }
+
+        return "key" + s;
     }
 
     private int totalTableFiles() {
@@ -611,4 +619,167 @@ public class DBTestRunner {
         dbTest.db.TEST_compactRange(1, null, null);
         assertTrue(dbTest.db.TEST_maxNextLevelOverlappingBytes() <= 20*1048576);
     }
+
+    private boolean between(long value, long low, long high) {
+        boolean result = (value >= low) && (value <= high);
+        if (!result) {
+            System.out.println(String.format("value %d is not in range (%d, %d)", value, low, high));
+        }
+        return result;
+    }
+
+    private long size(String start, String limit) {
+        List<Pair<String, String>> range = Lists.newArrayList(new Pair<>(start, limit));
+        return dbTest.db.getApproximateSizes(range, 1).get(0);
+    }
+
+    @Test
+    public void testApproximateSizes() {
+        do {
+            Options options = dbTest.currentOptions();
+            options.setWriteBufferSize(100000000); // large write buffer
+            options.setCompression(CompressionType.kNoCompression);
+            dbTest.destroyAndReopon();
+
+            assertTrue(between(size("", "xyz"), 0, 0));
+            dbTest.reopen(options);
+            assertTrue(between(size("", "xyz"), 0, 0));
+
+            // Write 8MB (80 values, each 100K)
+            assertEquals(dbTest.numTableFilesAtLevel(0), 0);
+            int N = 80;
+            int S1 = 100000;
+            int S2 = 105000;
+            for (int i = 0; i < N; i++) {
+                assertTrue(dbTest.put(key(i), TestUtils.randomString(S1)).isOk());
+            }
+
+            // 0 because GetApproximateSizes() does not account for memtable space
+            assertTrue(between(size("", key(50)), 0, 0));
+
+            if (options.isReuseLogs()) {
+                // Recovery will reuse memtable, and GetApproximateSizes() does not
+                // account for memtable usage;
+                dbTest.reopen(options);
+                assertTrue(between(size("", key(50)), 0, 0));
+                continue;
+            }
+
+            // Check sizes across recovery by reopening a few times
+            for (int run = 0; run < 3; run++) {
+                dbTest.reopen(options);
+
+                for (int compactStart = 0; compactStart < N; compactStart += 10){
+                    for (int i = 0; i < N; i += 10) {
+                        assertTrue(between(size("", key(i)), S1*i, S2*i));
+                        assertTrue(between(size("", key(i) + ".suffix"), S1*(i+1), S2*(i+1)));
+                        assertTrue(between(size(key(i), key(i+10)), S1*10, S2*10));
+                    }
+                    assertTrue(between(size("", key(50)), S1*50, S2*50));
+                    assertTrue(between(size("", key(50) + ".suffix"), S1*50, S2*50));
+
+                    String start = key(compactStart);
+                    String end = key(compactStart + 9);
+                    dbTest.db.TEST_compactRange(0, start, end);
+                }
+
+                assertEquals(dbTest.numTableFilesAtLevel(0), 0);
+                assertTrue(dbTest.numTableFilesAtLevel(1) > 0);
+            }
+        } while (dbTest.changeOptions());
+    }
+
+    @Test
+    public void testApproximateSizes_MixOfSmallAndLarge() {
+        do {
+            Options options = dbTest.currentOptions();
+            options.setCompression(CompressionType.kNoCompression);
+            dbTest.reopen();
+
+            String big1 = TestUtils.randomString(100000);
+            assertTrue(dbTest.put(key(0), TestUtils.randomString(10000)).isOk());
+            assertTrue(dbTest.put(key(1), TestUtils.randomString(10000)).isOk());
+            assertTrue(dbTest.put(key(2), big1).isOk());
+            assertTrue(dbTest.put(key(3), TestUtils.randomString(10000)).isOk());
+            assertTrue(dbTest.put(key(4), big1).isOk());
+            assertTrue(dbTest.put(key(5), TestUtils.randomString(10000)).isOk());
+            assertTrue(dbTest.put(key(6), TestUtils.randomString(300000)).isOk());
+            assertTrue(dbTest.put(key(7), TestUtils.randomString(10000)).isOk());
+
+            if (options.isReuseLogs()) {
+                // Need to force a memtable compaction since recovery does not do so.
+                assertTrue(dbTest.db.TEST_compactMemtable().isOk());
+            }
+
+            // Check sizes across recovery by reopening a few times
+            for (int run = 0; run < 3; run++) {
+                dbTest.reopen(options);
+                assertTrue(between(size("", key(0)),0, 0));
+                assertTrue(between(size("", key(1)),10000, 11000));
+                assertTrue(between(size("", key(2)),20000, 21000));
+                assertTrue(between(size("", key(3)),120000, 121000));
+                assertTrue(between(size("", key(4)),130000, 131000));
+                assertTrue(between(size("", key(5)),230000, 231000));
+                assertTrue(between(size("", key(6)),240000, 241000));
+                assertTrue(between(size("", key(7)),540000, 541000));
+                assertTrue(between(size("", key(8)),550000, 560000));
+
+                assertTrue(between(size(key(3), key(5)),110000, 111000));
+                dbTest.db.TEST_compactRange(0, null, null);
+            }
+        } while (dbTest.changeOptions());
+    }
+
+    @Test
+    public void testIteratorPinsRef() {
+        dbTest.put("foo", "hello");
+
+        // Get iterator that will yield the current contents of the DB.
+        Iterator<String, String> iter = dbTest.db.iterator(new ReadOptions());
+
+        // Write to force compactions
+        dbTest.put("foo", "newvalue1");
+        for (int i = 0; i < 100; i++) {
+            assertTrue(dbTest.put(key(i), key(i) + StringUtils.repeat('v', 100000)).isOk()); // 100K values
+        }
+        dbTest.put("foo", "newvalue2");
+
+        iter.seekToFirst();
+        assertTrue(iter.valid());
+        assertEquals("foo", iter.key());
+        assertEquals("hello", iter.value());
+        iter.next();
+        assertFalse(iter.valid());
+    }
+
+    @Test
+    public void testSnapshot() {
+        do {
+            dbTest.put("foo", "v1");
+            long s1 = dbTest.db.getSnapshot();
+            dbTest.put("foo", "v2");
+            long s2 = dbTest.db.getSnapshot();
+            dbTest.put("foo", "v3");
+            long s3 = dbTest.db.getSnapshot();
+
+            dbTest.put("foo", "v4");
+            assertEquals("v1", dbTest.get("foo", s1));
+            assertEquals("v2", dbTest.get("foo", s2));
+            assertEquals("v3", dbTest.get("foo", s3));
+            assertEquals("v4", dbTest.get("foo"));
+
+            dbTest.db.releaseSnapshot(s3);
+            assertEquals("v1", dbTest.get("foo", s1));
+            assertEquals("v2", dbTest.get("foo", s2));
+            assertEquals("v4", dbTest.get("foo"));
+
+            dbTest.db.releaseSnapshot(s1);
+            assertEquals("v2", dbTest.get("foo", s2));
+            assertEquals("v4", dbTest.get("foo"));
+
+            dbTest.db.releaseSnapshot(s2);
+            assertEquals("v4", dbTest.get("foo"));
+        } while (dbTest.changeOptions());
+    }
+
 }
