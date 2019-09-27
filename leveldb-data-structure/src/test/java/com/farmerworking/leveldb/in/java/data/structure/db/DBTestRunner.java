@@ -10,6 +10,9 @@ import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.ReadOptions;
 import com.farmerworking.leveldb.in.java.api.WriteOptions;
 import com.farmerworking.leveldb.in.java.common.TestUtils;
+import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
+import com.farmerworking.leveldb.in.java.data.structure.memory.ParsedInternalKey;
+import com.farmerworking.leveldb.in.java.data.structure.memory.ValueType;
 import com.farmerworking.leveldb.in.java.data.structure.version.Config;
 import com.google.common.collect.Lists;
 import javafx.util.Pair;
@@ -782,4 +785,258 @@ public class DBTestRunner {
         } while (dbTest.changeOptions());
     }
 
+    private String allEntriesFor(String userKey) {
+        Iterator<String, String> iter = dbTest.db.TEST_newInternalIterator();
+        InternalKey target = new InternalKey(userKey, InternalKey.kMaxSequenceNumber, ValueType.kTypeValue);
+        iter.seek(target.encode());
+        String result;
+
+        if (iter.status().isNotOk()) {
+            result = iter.status().toString();
+        } else {
+            result = "[ ";
+            boolean first = true;
+            while (iter.valid()) {
+                Pair<Boolean, ParsedInternalKey> parse = InternalKey.parseInternalKey(iter.key());
+                if (!parse.getKey()) {
+                    result += "CORRUPTED";
+                } else {
+                    if (dbTest.lastOptions.getComparator().compare(parse.getValue().getUserKeyChar(), userKey.toCharArray()) != 0) {
+                        break;
+                    }
+
+                    if (!first) {
+                        result += ", ";
+                    }
+
+                    first = false;
+                    switch (parse.getValue().getValueType()) {
+                        case kTypeValue:
+                            result += iter.value();
+                            break;
+                        case kTypeDeletion:
+                            result += "DEL";
+                            break;
+                    }
+                }
+                iter.next();
+            }
+
+            if (!first) {
+                result += " ";
+            }
+
+            result += "]";
+        }
+
+        return result;
+    }
+
+    @Test
+    public void testHiddenValuesAreRemoved() {
+        do {
+            fillLevels("a", "z");
+            String big = TestUtils.randomString(50000);
+            dbTest.put("foo", big);
+            dbTest.put("pastfoo", "v");
+            long s = dbTest.db.getSnapshot();
+            dbTest.put("foo", "tiny");
+            dbTest.put("pastfoo2", "v2"); // Advance sequence number one more
+
+            assertTrue(dbTest.db.TEST_compactMemtable().isOk());
+            assertTrue(dbTest.numTableFilesAtLevel(0) > 0);
+
+            assertEquals(big, dbTest.get("foo", s));
+            assertTrue(between(size("", "pastfoo"), 50000, 60000));
+            dbTest.db.releaseSnapshot(s);
+            assertEquals(allEntriesFor("foo"), "[ tiny, " + big + " ]");
+            dbTest.db.TEST_compactRange(0, null, "x");
+            assertEquals(allEntriesFor("foo"), "[ tiny ]");
+            assertEquals(dbTest.numTableFilesAtLevel(0), 0);
+            assertEquals(dbTest.numTableFilesAtLevel(1), 1);
+            dbTest.db.TEST_compactRange(1, null, "x");
+            assertEquals(allEntriesFor("foo"), "[ tiny ]");
+            assertTrue(between(size("", "pastfoo"), 0, 1000));
+        } while (dbTest.changeOptions());
+    }
+
+    @Test
+    public void testDeletionMarkers1() {
+        dbTest.put("foo", "v1");
+        assertTrue(dbTest.db.TEST_compactMemtable().isOk());
+        int last = Config.kMaxMemCompactLevel;
+        assertEquals(dbTest.numTableFilesAtLevel(last), 1); // foo => v1 is now in last level
+
+        // Place a table at level last-1 to prevent merging with preceding mutation
+        dbTest.put("a", "begin");
+        dbTest.put("z", "end");
+        dbTest.db.TEST_compactMemtable();
+        assertEquals(dbTest.numTableFilesAtLevel(last), 1);
+        assertEquals(dbTest.numTableFilesAtLevel(last - 1), 1);
+
+        dbTest.delete("foo");
+        dbTest.put("foo", "v2");
+        assertEquals(allEntriesFor("foo"), "[ v2, DEL, v1 ]");
+        dbTest.db.TEST_compactMemtable(); // Moves to level last-2
+        assertEquals(allEntriesFor("foo"), "[ v2, DEL, v1 ]");
+        dbTest.db.TEST_compactRange(last - 2, null, "z");
+        // DEL eliminated, but v1 remains because we aren't compacting that level
+        // (DEL can be eliminated because v2 hides v1).
+        assertEquals(allEntriesFor("foo"), "[ v2, v1 ]");
+        dbTest.db.TEST_compactRange(last - 1, null, null);
+        // Merging last-1 w/ last, so we are the base level for "foo", so
+        // DEL is removed.  (as is v1).
+        assertEquals(allEntriesFor("foo"), "[ v2 ]");
+    }
+
+    @Test
+    public void testDeletionMarkers2() {
+        dbTest.put("foo", "v1");
+        assertTrue(dbTest.db.TEST_compactMemtable().isOk());
+        int last = Config.kMaxMemCompactLevel;
+        assertEquals(dbTest.numTableFilesAtLevel(last), 1); // foo => v1 is now in last level
+
+        // Place a table at level last-1 to prevent merging with preceding mutation
+        dbTest.put("a", "begin");
+        dbTest.put("z", "end");
+        dbTest.db.TEST_compactMemtable();
+        assertEquals(dbTest.numTableFilesAtLevel(last), 1);
+        assertEquals(dbTest.numTableFilesAtLevel(last - 1), 1);
+
+        dbTest.delete("foo");
+        assertEquals(allEntriesFor("foo"), "[ DEL, v1 ]");
+        dbTest.db.TEST_compactMemtable(); // Moves to level last-2
+        assertEquals(allEntriesFor("foo"), "[ DEL, v1 ]");
+        dbTest.db.TEST_compactRange(last - 2, null, "z");
+        // DEL kept: "last" file overlaps
+        assertEquals(allEntriesFor("foo"), "[ DEL, v1 ]");
+        dbTest.db.TEST_compactRange(last - 1, null, null);
+        // Merging last-1 w/ last, so we are the base level for "foo", so
+        // DEL is removed.  (as is v1).
+        assertEquals(allEntriesFor("foo"), "[ ]");
+    }
+
+    private String filesPerLevel() {
+        String result = "";
+        int lastNonZeroOffset = 0;
+        for (int i = 0; i < Config.kNumLevels; i++) {
+            int f = dbTest.numTableFilesAtLevel(i);
+            result += String.format("%s%d", i > 0 ? "," : "", f);
+            if (f > 0) {
+                lastNonZeroOffset = result.length();
+            }
+        }
+        return result.substring(0, lastNonZeroOffset);
+    }
+
+    @Test
+    public void testOverlapInLevel0() {
+        do {
+            assertEquals("Fix test to match config", Config.kMaxMemCompactLevel, 2);
+
+            assertTrue(dbTest.put("100", "v100").isOk());
+            assertTrue(dbTest.put("999", "v999").isOk());
+            dbTest.db.TEST_compactMemtable();
+            assertTrue(dbTest.delete("100").isOk());
+            assertTrue(dbTest.delete("999").isOk());
+            dbTest.db.TEST_compactMemtable();
+            assertEquals("0,1,1", filesPerLevel());
+
+            // Make files spanning the following ranges in level-0:
+            //  files[0]  200 .. 900
+            //  files[1]  300 .. 500
+            // Note that files are sorted by smallest key.
+            assertTrue(dbTest.put("300", "v300").isOk());
+            assertTrue(dbTest.put("500", "v500").isOk());
+            dbTest.db.TEST_compactMemtable();
+            assertTrue(dbTest.put("200", "v200").isOk());
+            assertTrue(dbTest.put("600", "v600").isOk());
+            assertTrue(dbTest.put("900", "v900").isOk());
+            dbTest.db.TEST_compactMemtable();
+            assertEquals("2,1,1", filesPerLevel());
+
+            dbTest.db.TEST_compactRange(1, null, null);
+            dbTest.db.TEST_compactRange(2, null, null);
+            assertEquals("2", filesPerLevel());
+
+            // Do a memtable compaction.  Before bug-fix, the compaction would
+            // not detect the overlap with level-0 files and would incorrectly place
+            // the deletion in a deeper level.
+            assertTrue(dbTest.delete("600").isOk());
+            dbTest.db.TEST_compactMemtable();
+            assertEquals("3", filesPerLevel());
+            assertEquals("NOT_FOUND", dbTest.get("600"));
+        } while (dbTest.changeOptions());
+    }
+
+    // Return a string that contains all key,value pairs in order,
+    // formatted like "(k1->v1)(k2->v2)".
+    private String contents() {
+        Vector<String> forward = new Vector<>();
+        String result = "";
+        Iterator<String, String> iter = dbTest.db.iterator(new ReadOptions());
+        for(iter.seekToFirst(); iter.valid(); iter.next()) {
+            String s = dbTest.iterStatus(iter);
+            result += "(";
+            result += s;
+            result += ")";
+            forward.add(s);
+        }
+
+        // Check reverse iteration results are the reverse of forward results
+        int match = 0;
+        for (iter.seekToLast(); iter.valid(); iter.prev()) {
+            assertTrue(match < forward.size());
+            assertEquals(dbTest.iterStatus(iter), forward.get(forward.size() - match - 1));
+            match ++;
+        }
+        assertEquals(match, forward.size());
+        return result;
+    }
+
+    @Test
+    public void testL0_CompactionBug_Issue44_a() throws InterruptedException {
+        dbTest.reopen();
+        assertTrue(dbTest.put("b", "v").isOk());
+        dbTest.reopen();
+        assertTrue(dbTest.delete("b").isOk());
+        assertTrue(dbTest.delete("a").isOk());
+        dbTest.reopen();
+        assertTrue(dbTest.delete("a").isOk());
+        dbTest.reopen();
+        assertTrue(dbTest.put("a", "v").isOk());
+        dbTest.reopen();
+        dbTest.reopen();
+        assertEquals("(a->v)", contents());
+        Thread.sleep(1000); // wait for compaction finish
+        assertEquals("(a->v)", contents());
+
+    }
+
+    @Test
+    public void testL0_CompactionBug_Issue44_b() throws InterruptedException {
+        dbTest.reopen();
+        assertTrue(dbTest.put("", "").isOk());
+        dbTest.reopen();
+        assertTrue(dbTest.delete("e").isOk());
+        assertTrue(dbTest.put("", "").isOk());
+        dbTest.reopen();
+        assertTrue(dbTest.put("c", "cv").isOk());
+        dbTest.reopen();
+        assertTrue(dbTest.put("", "").isOk());
+        dbTest.reopen();
+        assertTrue(dbTest.put("", "").isOk());
+        Thread.sleep(1000); // wait for compaction finish
+        dbTest.reopen();
+        assertTrue(dbTest.put("d", "dv").isOk());
+        dbTest.reopen();
+        assertTrue(dbTest.put("", "").isOk());
+        dbTest.reopen();
+        assertTrue(dbTest.delete("d").isOk());
+        assertTrue(dbTest.delete("b").isOk());
+        dbTest.reopen();
+        assertEquals("(->)(c->cv)", contents());
+        Thread.sleep(1000); // wait for compaction finish
+        assertEquals("(->)(c->cv)", contents());
+    }
 }

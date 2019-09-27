@@ -221,7 +221,7 @@ public class DBTest {
     DB db;
     SpecialEnv env;
     private String dbname;
-    private Options lastOptions;
+    Options lastOptions;
     private FilterPolicy filterPolicy;
     private OptionConfig optionConfig;
 

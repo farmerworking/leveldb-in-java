@@ -20,7 +20,7 @@ public class Config {
      * the largest level since that can generate a lot of wasted disk
      * space if the same key space is being repeatedly overwritten.
      */
-    static int kMaxMemCompactLevel = 2;
+    public static int kMaxMemCompactLevel = 2;
 
     // Approximate gap in bytes between samples of data read during iteration.
     public static int kReadBytesPeriod = 1048576;

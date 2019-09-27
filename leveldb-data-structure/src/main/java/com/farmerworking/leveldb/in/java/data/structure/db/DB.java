@@ -41,6 +41,8 @@ public interface DB {
 
     void TEST_compactRange(int level, String begin, String end);
 
+    Iterator<String, String> TEST_newInternalIterator();
+
     long TEST_maxNextLevelOverlappingBytes();
 
     List<Long> getApproximateSizes(List<Pair<String, String>> range, int n);

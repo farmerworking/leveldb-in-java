@@ -396,6 +396,12 @@ public class DBImpl implements DB {
             pair.getValue().getValue());
     }
 
+    @Override
+    public Iterator<String, String> TEST_newInternalIterator() {
+        Pair<Iterator<String, String>, Pair<Long, Long>> pair = internalIterator(new ReadOptions());
+        return pair.getKey();
+    }
+
     public void recordReadSample(String key) {
         try {
             this.mutex.lock();
