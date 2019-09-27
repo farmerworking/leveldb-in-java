@@ -1208,7 +1208,7 @@ public class DBImpl implements DB {
         if (end == null) {
             manual.setEnd(null);
         } else {
-            manual.setEnd(new InternalKey(begin, 0, ValueType.kTypeDeletion));
+            manual.setEnd(new InternalKey(end, 0, ValueType.kTypeDeletion));
         }
 
         try {
