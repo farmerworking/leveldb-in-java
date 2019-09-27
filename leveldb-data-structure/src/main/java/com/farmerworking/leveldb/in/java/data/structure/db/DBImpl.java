@@ -1019,12 +1019,13 @@ public class DBImpl implements DB {
             mutex.lock();
             assert this.bgCompactionScheduled;
 
+            boolean result = true;
             if (this.shuttingDown.get()) {
                 // No more background work when shutting down.
-                return false;
+                result = false;
             } else if (this.bgError.isNotOk()) {
                 // No more background work after a background error.
-                return false;
+                result = false;
             } else {
                 backgroundCompaction();
             }
@@ -1034,7 +1035,7 @@ public class DBImpl implements DB {
             // so reschedule another compaction if needed.
             maybeScheduleCompaction();
             this.bgCondition.signalAll();
-            return true;
+            return result;
         } finally {
             mutex.unlock();
         }
