@@ -87,6 +87,7 @@ public interface DB {
             assert db.getMemtable() != null;
             return new Pair<>(status, db);
         } else {
+            db.close();
             return new Pair<>(status, null);
         }
     }
