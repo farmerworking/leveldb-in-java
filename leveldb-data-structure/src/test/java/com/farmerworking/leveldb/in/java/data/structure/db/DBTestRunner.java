@@ -4,10 +4,13 @@ import java.util.List;
 import java.util.Random;
 import java.util.Vector;
 
+import com.farmerworking.leveldb.in.java.api.BytewiseComparator;
+import com.farmerworking.leveldb.in.java.api.Comparator;
 import com.farmerworking.leveldb.in.java.api.CompressionType;
 import com.farmerworking.leveldb.in.java.api.Iterator;
 import com.farmerworking.leveldb.in.java.api.Options;
 import com.farmerworking.leveldb.in.java.api.ReadOptions;
+import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.api.WriteOptions;
 import com.farmerworking.leveldb.in.java.common.TestUtils;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
@@ -1038,5 +1041,227 @@ public class DBTestRunner {
         assertEquals("(->)(c->cv)", contents());
         Thread.sleep(1000); // wait for compaction finish
         assertEquals("(->)(c->cv)", contents());
+    }
+
+    class NewComparator implements Comparator {
+        private BytewiseComparator bytewiseComparator = new BytewiseComparator();
+
+        @Override
+        public String name() {
+            return "leveldb.NewComparator";
+        }
+
+        @Override
+        public int compare(char[] a, char[] b) {
+            return bytewiseComparator.compare(a, b);
+        }
+
+        @Override
+        public char[] findShortestSeparator(char[] a, char[] b) {
+            return bytewiseComparator.findShortestSeparator(a, b);
+        }
+
+        @Override
+        public char[] findShortSuccessor(char[] a) {
+            return bytewiseComparator.findShortSuccessor(a);
+        }
+    }
+
+    @Test
+    public void testComparatorCheck() {
+        Options options = dbTest.currentOptions();
+        options.setComparator(new NewComparator());
+        Status status = dbTest.tryReopen(options);
+        assertTrue(status.isNotOk());
+        assertEquals("Invalid argument: leveldb.BytewiseComparator does not match existing comparator: leveldb.NewComparator", status.toString());
+    }
+
+    class NumberComparator implements Comparator {
+        @Override
+        public String name() {
+            return "test.NumberComparator";
+        }
+
+        @Override
+        public int compare(char[] a, char[] b) {
+            return toNumber(a) - toNumber(b);
+        }
+
+        @Override
+        public char[] findShortestSeparator(char[] a, char[] b) {
+            toNumber(a);
+            toNumber(b);
+            return a;
+        }
+
+        @Override
+        public char[] findShortSuccessor(char[] a) {
+            toNumber(a);
+            return a;
+        }
+
+        private int toNumber(char[] chars) {
+            assertTrue(chars.length >= 2);
+            assertEquals('[', chars[0]);
+            assertEquals(']', chars[chars.length - 1]);
+            return Integer.decode(new String(chars, 1, chars.length - 2));
+        }
+    }
+
+    @Test
+    public void testCustomComparator() {
+        NumberComparator numberComparator = new NumberComparator();
+        Options options = dbTest.currentOptions();
+        options.setCreateIfMissing(true);
+        options.setComparator(numberComparator);
+        options.setFilterPolicy(null); // Cannot use bloom filters
+        options.setWriteBufferSize(1000); // Compact more often
+        dbTest.destroyAndReopon(options);
+        assertTrue(dbTest.put("[10]", "ten").isOk());
+        assertTrue(dbTest.put("[0x14]", "twenty").isOk());
+        for (int i = 0; i < 2; i++) {
+            assertEquals("ten", dbTest.get("[10]"));
+            assertEquals("ten", dbTest.get("[0xa]"));
+            assertEquals("twenty", dbTest.get("[20]"));
+            assertEquals("twenty", dbTest.get("[0x14]"));
+            assertEquals("NOT_FOUND", dbTest.get("[15]"));
+            assertEquals("NOT_FOUND", dbTest.get("[0xf]"));
+            dbTest.db.compactRange("[0]", "[9999]");
+        }
+
+        for (int run = 0; run < 2; run++) {
+            for (int i = 0; i < 1000; i++) {
+                String value = String.format("[%d]", i * 10);
+                assertTrue(dbTest.put(value, value).isOk());
+            }
+
+            dbTest.db.compactRange("[0]", "[1000000]");
+        }
+    }
+
+    @Test
+    public void testManualCompaction() {
+        assertEquals("Need to update this test to match kMaxMemCompactLevel", 2, Config.kMaxMemCompactLevel);
+
+        makeTables(3, "p", "q");
+        assertEquals("1,1,1", filesPerLevel());
+
+        // Compaction range falls before files
+        dbTest.db.compactRange("", "c");
+        assertEquals("1,1,1", filesPerLevel());
+
+        // Compaction range falls after files
+        dbTest.db.compactRange("r", "z");
+        assertEquals("1,1,1", filesPerLevel());
+
+        // Compaction range overlaps files
+        dbTest.db.compactRange("p1", "p9");
+        assertEquals("0,0,1", filesPerLevel());
+
+        // Populate a different range
+        makeTables(3, "c", "e");
+        assertEquals("1,1,2", filesPerLevel());
+
+        // Compact just the new range
+        dbTest.db.compactRange("b", "f");
+        assertEquals("0,0,2", filesPerLevel());
+
+        // compact all
+        makeTables(1, "a", "z");
+        assertEquals("0,1,2", filesPerLevel());
+        dbTest.db.compactRange(null, null);
+        assertEquals("0,0,1", filesPerLevel());
+    }
+
+    @Test
+    public void testDBOpen_Options() {
+        String dbname = dbTest.env.getTestDirectory().getValue() + "/db_options_test";
+        DB.destroyDB(dbname, new Options());
+
+        // Does not exist, and create_if_missing == false: error
+        Options options = new Options();
+        options.setCreateIfMissing(false);
+        Pair<Status, DB> pair = DB.open(options, dbname);
+        assertTrue(pair.getKey().toString().contains("does not exist (createIfMissing is false)"));
+        assertNull(pair.getValue());
+
+        // Does not exist, and create_if_missing == true: OK
+        options.setCreateIfMissing(true);
+        pair = DB.open(options, dbname);
+        assertTrue(pair.getKey().isOk());
+        assertNotNull(pair.getValue());
+
+        pair.getValue().close();
+
+        // Does exist, and error_if_exists == true: error
+        options.setCreateIfMissing(false);
+        options.setErrorIfExists(true);
+        pair = DB.open(options, dbname);
+        assertTrue(pair.getKey().toString().contains("exists (errorIfExists is true)"));
+        assertNull(pair.getValue());
+
+        // Does exist, and error_if_exists == false: OK
+        options.setCreateIfMissing(true);
+        options.setErrorIfExists(false);
+        pair = DB.open(options, dbname);
+        assertTrue(pair.getKey().isOk());
+        assertNotNull(pair.getValue());
+
+        pair.getValue().close();
+    }
+
+    @Test
+    public void testLocking() {
+        Pair<Status, DB> pair = DB.open(dbTest.currentOptions(), dbTest.dbname);
+        assertTrue(pair.getKey().isNotOk());
+    }
+
+    private int countFiles() {
+        Pair<Status, List<String>> tmp = dbTest.env.getChildren(dbTest.dbname);
+        assertTrue(tmp.getKey().isOk());
+        return tmp.getValue().size();
+    }
+
+    // Check that number of files does not grow when we are out of space
+    @Test
+    public void testNoSpace() {
+        Options options = dbTest.currentOptions();
+        options.setEnv(dbTest.env);
+        dbTest.reopen(options);
+
+        assertTrue(dbTest.put("foo", "v1").isOk());
+        assertEquals("v1", dbTest.get("foo"));
+        dbTest.db.compactRange("a", "z");
+        int numFiles = countFiles();
+        dbTest.env.noSpace.set(true); // Force out-of-space errors
+        for (int i = 0; i < 10; i++) {
+            for (int level = 0; level < Config.kNumLevels - 1; level++) {
+                dbTest.db.TEST_compactRange(level, null, null);
+            }
+        }
+        dbTest.env.noSpace.set(false);
+        assertTrue(countFiles() < numFiles + 3);
+    }
+
+    @Test
+    public void testNonWritableFileSystem() throws InterruptedException {
+        Options options = dbTest.currentOptions();
+        options.setWriteBufferSize(1000);
+        options.setEnv(dbTest.env);
+        dbTest.reopen(options);
+
+        assertTrue(dbTest.put("foo", "v1").isOk());
+        dbTest.env.nonWritable.set(true); // Force errors for new files
+        String big = StringUtils.repeat('x', 100000);
+        int errors = 0;
+        for (int i = 0; i < 20; i++) {
+            System.out.println(String.format("iter %d; errors %d", i, errors));
+            if (dbTest.put("foo", big).isNotOk()) {
+                errors ++;
+                Thread.sleep(100);
+            }
+        }
+        assertTrue(errors > 0);
+        dbTest.env.nonWritable.set(false);
     }
 }

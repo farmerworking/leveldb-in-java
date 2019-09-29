@@ -62,6 +62,8 @@ public class DBTest {
     class SpecialEnv implements Env {
         private final DefaultEnv env;
         AtomicBoolean delayDataSync = new AtomicBoolean(false);
+        AtomicBoolean noSpace = new AtomicBoolean(false);
+        AtomicBoolean nonWritable = new AtomicBoolean(false);
 
         public SpecialEnv(DefaultEnv env) {
             this.env = env;
@@ -78,7 +80,12 @@ public class DBTest {
 
             @Override
             public Status append(String data) {
-                return this.base.append(data);
+                if (this.env.noSpace.get()) {
+                    // Drop writes on the floor
+                    return Status.OK();
+                } else {
+                    return this.base.append(data);
+                }
             }
 
             @Override
@@ -135,6 +142,10 @@ public class DBTest {
 
         @Override
         public Pair<Status, WritableFile> newWritableFile(String filename) {
+            if (this.nonWritable.get()) {
+                return new Pair<>(Status.IOError("simulated write error"), null);
+            }
+
             Pair<Status, WritableFile> pair = this.env.newWritableFile(filename);
             if (pair.getKey().isOk()) {
                 if (filename.contains(".ldb") || filename.contains(".log")) {
@@ -220,7 +231,7 @@ public class DBTest {
 
     DB db;
     SpecialEnv env;
-    private String dbname;
+    String dbname;
     Options lastOptions;
     private FilterPolicy filterPolicy;
     private OptionConfig optionConfig;
@@ -260,6 +271,11 @@ public class DBTest {
         assertTrue(tryReopen().isOk());
     }
 
+    public void destroyAndReopon(Options options) {
+        destroy();
+        assertTrue(tryReopen(options).isOk());
+    }
+
     void destroy() {
         if (this.db != null) {
             this.db.close();
@@ -268,7 +284,7 @@ public class DBTest {
         DB.destroyDB(this.dbname, new Options());
     }
 
-    private Status tryReopen() {
+    public Status tryReopen() {
         if (this.db != null) {
             this.db.close();
         }
@@ -283,7 +299,7 @@ public class DBTest {
         return pair.getKey();
     }
 
-    private Status tryReopen(Options options) {
+    public Status tryReopen(Options options) {
         if (this.db != null) {
             this.db.close();
         }
