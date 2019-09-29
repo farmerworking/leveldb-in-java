@@ -11,8 +11,10 @@ import javafx.util.Pair;
 
 import java.io.*;
 import java.lang.management.ManagementFactory;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -162,7 +164,8 @@ public class DefaultEnv implements Env {
     public Pair<Status, FileLock> lockFile(String lockFileName) {
         Path path = Paths.get(lockFileName);
         try {
-            FileChannel channel = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
+            FileChannel channel = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE,
+                StandardOpenOption.CREATE);
 
             if (!addLock(lockFileName)) {
                 channel.close();
@@ -177,7 +180,7 @@ public class DefaultEnv implements Env {
             }
 
             return new Pair<>(Status.OK(), lock);
-        } catch (IOException e) {
+        } catch (OverlappingFileLockException | IOException e) {
             return new Pair<>(Status.IOError(lockFileName), null);
         }
     }
