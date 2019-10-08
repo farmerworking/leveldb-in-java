@@ -21,6 +21,7 @@ public class Version {
     final InternalKeyComparator internalKeyComparator;
     final Options options;
     private final TableCache tableCache;
+    private final List<Version> dummyVersions;
 
     // Number of live refs to this version
     int refs;
@@ -49,6 +50,7 @@ public class Version {
         this.internalKeyComparator = versionSetBelongTo.getInternalKeyComparator();
         this.options = versionSetBelongTo.getOptions();
         this.tableCache = versionSetBelongTo.getTableCache();
+        this.dummyVersions = versionSetBelongTo.getDummyVersions();
 
         this.refs = 0;
         this.fileToCompact = null;
@@ -221,6 +223,10 @@ public class Version {
     public void unref() {
         assert this.refs >= 1;
         this.refs --;
+
+        if (this.refs == 0) {
+            this.dummyVersions.remove(this);
+        }
     }
 
     public int numFiles(int level) {
