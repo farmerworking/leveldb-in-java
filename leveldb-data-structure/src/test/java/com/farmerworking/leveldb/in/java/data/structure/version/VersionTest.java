@@ -123,7 +123,9 @@ public class VersionTest {
 
     @Test(expected = AssertionError.class)
     public void testRefs() {
-        Version version = new Version(new VersionSet());
+        VersionSet mock = mock(VersionSet.class);
+        doReturn(new ArrayList<>()).when(mock).getDummyVersions();
+        Version version = new Version(mock);
         assertEquals(0, version.refs);
 
         version.ref();

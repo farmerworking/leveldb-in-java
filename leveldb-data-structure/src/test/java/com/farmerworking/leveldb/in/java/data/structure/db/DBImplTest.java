@@ -1259,6 +1259,7 @@ public class DBImplTest {
         assertFalse(db.backgroundCall());
         db.getShuttingDown().set(false);
 
+        db.setBgCompactionScheduled(true);
         db.setBgError(Status.IOError(""));
         assertFalse(db.backgroundCall());
         db.setBgError(Status.OK());
