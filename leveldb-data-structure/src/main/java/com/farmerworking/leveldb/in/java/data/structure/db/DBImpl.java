@@ -589,7 +589,7 @@ public class DBImpl implements DB {
             } else {
                 // Attempt to switch to a new memtable and trigger compaction of old
                 assert this.versions.getPrevLogNumber() == 0;
-                long newLogNumber = this.versions.getNextFileNumber();
+                long newLogNumber = this.versions.newFileNumber();
                 Pair<Status, WritableFile> writable = this.env.newWritableFile(FileName.logFileName(this.dbname, newLogNumber));
                 status = writable.getKey();
                 if (status.isNotOk()) {
