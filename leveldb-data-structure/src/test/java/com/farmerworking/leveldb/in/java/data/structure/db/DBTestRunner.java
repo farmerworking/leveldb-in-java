@@ -3,6 +3,7 @@ package com.farmerworking.leveldb.in.java.data.structure.db;
 import java.util.List;
 import java.util.Random;
 import java.util.Vector;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.farmerworking.leveldb.in.java.api.BytewiseComparator;
 import com.farmerworking.leveldb.in.java.api.Comparator;
@@ -13,6 +14,8 @@ import com.farmerworking.leveldb.in.java.api.ReadOptions;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.api.WriteOptions;
 import com.farmerworking.leveldb.in.java.common.TestUtils;
+import com.farmerworking.leveldb.in.java.data.structure.cache.ShardedLRUCache;
+import com.farmerworking.leveldb.in.java.data.structure.filter.BloomFilterPolicy;
 import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.ParsedInternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.ValueType;
@@ -1263,5 +1266,126 @@ public class DBTestRunner {
         }
         assertTrue(errors > 0);
         dbTest.env.nonWritable.set(false);
+    }
+
+    @Test
+    public void testWriteSyncError() {
+        // Check that log sync errors cause the DB to disallow future writes.
+
+        // (a) Cause log sync calls to fail
+        Options options = dbTest.currentOptions();
+        options.setEnv(dbTest.env);
+        dbTest.reopen(options);
+        dbTest.env.dataSyncError.set(true);
+
+        // (b) Normal write should succeed
+        WriteOptions writeOptions = new WriteOptions();
+        assertTrue(dbTest.put(writeOptions, "k1", "v1").isOk());
+        assertEquals("v1", dbTest.get("k1"));
+
+        // (c) Do a sync write; should fail
+        writeOptions.setSync(true);
+        assertTrue(dbTest.put(writeOptions, "k2", "v2").isNotOk());
+        assertEquals("v1", dbTest.get("k1"));
+        assertEquals("NOT_FOUND", dbTest.get("k2"));
+
+        // (d) make sync behave normally
+        dbTest.env.dataSyncError.set(false);
+
+        // (e) Do a non-sync write; should fail
+        writeOptions.setSync(false);
+        assertTrue(dbTest.put(writeOptions, "k3", "v3").isNotOk());
+        assertEquals("v1", dbTest.get("k1"));
+        assertEquals("NOT_FOUND", dbTest.get("k2"));
+        assertEquals("NOT_FOUND", dbTest.get("k3"));
+    }
+
+    @Test
+    public void testManifestWriteError() {
+        // Test for the following problem:
+        // (a) Compaction produces file F
+        // (b) Log record containing F is written to MANIFEST file, but Sync() fails
+        // (c) GC deletes F
+        // (d) After reopening DB, reads fail since deleted F is named in log record
+
+        // We iterate twice.  In the second iteration, everything is the
+        // same except the log record never makes it to the MANIFEST file.
+        for (int iter = 0; iter < 2; iter++) {
+            AtomicBoolean errorType = (iter == 0) ? dbTest.env.manifestSyncError
+                : dbTest.env.manifestWriteError;
+
+            // Insert foo=>bar mapping
+            Options options = dbTest.currentOptions();
+            options.setEnv(dbTest.env);
+            options.setCreateIfMissing(true);
+            options.setErrorIfExists(false);
+            dbTest.destroyAndReopon(options);
+            assertTrue(dbTest.put("foo", "bar").isOk());
+            assertEquals("bar", dbTest.get("foo"));
+
+            // Memtable compaction (will succeed)
+            dbTest.db.TEST_compactMemtable();
+            assertEquals("bar", dbTest.get("foo"));
+            int last = Config.kMaxMemCompactLevel;
+            assertEquals(dbTest.numTableFilesAtLevel(last), 1);   // foo=>bar is now in last level
+
+            // Merging compaction (will fail)
+            errorType.set(true);
+            dbTest.db.TEST_compactRange(last, null, null); // Should fail
+            assertEquals("bar", dbTest.get("foo"));
+
+            // Recovery: should not lose data
+            errorType.set(false);
+            dbTest.reopen(options);
+            assertEquals("bar", dbTest.get("foo"));
+        }
+    }
+
+    @Test
+    public void testMissingSSTFile() {
+        assertTrue(dbTest.put("foo", "bar").isOk());
+        assertEquals("bar", dbTest.get("foo"));
+
+        // Dump the memtable to disk.
+        dbTest.db.TEST_compactMemtable();
+        assertEquals("bar", dbTest.get("foo"));
+
+        dbTest.close();
+        assertTrue(dbTest.deleteAnSSTFile());
+        Options options = dbTest.currentOptions();
+        options.setParanoidChecks(true);
+        Status status = dbTest.tryReopen(options);
+        assertTrue(status.isNotOk());
+        assertTrue(status.getMessage().contains("1 missing file"));
+    }
+
+    @Test
+    public void testStillReadSST() {
+        assertTrue(dbTest.put("foo", "bar").isOk());
+        assertEquals("bar", dbTest.get("foo"));
+
+        // Dump the memtable to disk.
+        dbTest.db.TEST_compactMemtable();
+        assertEquals("bar", dbTest.get("foo"));
+        dbTest.close();
+
+        assertTrue(dbTest.renameLDBToSST() > 0);
+        Options options = dbTest.currentOptions();
+        options.setParanoidChecks(true);
+        Status status = dbTest.tryReopen(options);
+        assertTrue(status.isOk());
+        assertEquals("bar", dbTest.get("foo"));
+    }
+
+    @Test
+    public void testFilesDeletedAfterCompaction() {
+        assertTrue(dbTest.put("foo", "v2").isOk());
+        dbTest.db.compactRange("a", "z");
+        int count = countFiles();
+        for (int i = 0; i < 10; i++) {
+            assertTrue(dbTest.put("foo", "v2").isOk());
+            dbTest.db.compactRange("a", "z");
+        }
+        assertEquals(count, countFiles());
     }
 }

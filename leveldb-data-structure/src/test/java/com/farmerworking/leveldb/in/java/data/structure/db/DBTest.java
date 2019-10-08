@@ -4,6 +4,7 @@ import java.nio.channels.FileLock;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.farmerworking.leveldb.in.java.api.CompressionType;
 import com.farmerworking.leveldb.in.java.api.FilterPolicy;
@@ -14,17 +15,46 @@ import com.farmerworking.leveldb.in.java.api.ReadOptions;
 import com.farmerworking.leveldb.in.java.api.Status;
 import com.farmerworking.leveldb.in.java.api.WriteOptions;
 import com.farmerworking.leveldb.in.java.data.structure.filter.BloomFilterPolicy;
-import com.farmerworking.leveldb.in.java.data.structure.writebatch.WriteBatch;
 import com.farmerworking.leveldb.in.java.file.Env;
+import com.farmerworking.leveldb.in.java.file.FileName;
+import com.farmerworking.leveldb.in.java.file.FileType;
 import com.farmerworking.leveldb.in.java.file.RandomAccessFile;
 import com.farmerworking.leveldb.in.java.file.SequentialFile;
 import com.farmerworking.leveldb.in.java.file.WritableFile;
 import com.farmerworking.leveldb.in.java.file.impl.DefaultEnv;
-import com.sun.corba.se.spi.ior.Writeable;
 import javafx.util.Pair;
 import static org.junit.Assert.*;
 
 public class DBTest {
+    public boolean deleteAnSSTFile() {
+        Pair<Status, List<String>> pair = this.env.getChildren(this.dbname);
+        assertTrue(pair.getKey().isOk());
+        for (String filename : pair.getValue()) {
+            Pair<Long, FileType> pair2 = FileName.parseFileName(filename);
+            if (pair2.getValue().equals(FileType.kTableFile)) {
+                assertTrue(this.env.delete(FileName.tableFileName(this.dbname, pair2.getKey())).getKey().isOk());
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public int renameLDBToSST() {
+        Pair<Status, List<String>> pair = this.env.getChildren(this.dbname);
+        assertTrue(pair.getKey().isOk());
+        int count = 0;
+        for (String filename : pair.getValue()) {
+            Pair<Long, FileType> pair2 = FileName.parseFileName(filename);
+            if (pair2.getValue().equals(FileType.kTableFile)) {
+                String from = FileName.tableFileName(this.dbname, pair2.getKey());
+                String to = FileName.SSTTableFileName(this.dbname, pair2.getKey());
+                assertTrue(this.env.renameFile(from, to).isOk());
+                count ++;
+            }
+        }
+        return count;
+    }
+
     enum OptionConfig {
         kDefault(0),
         kReuse(1),
@@ -64,6 +94,11 @@ public class DBTest {
         AtomicBoolean delayDataSync = new AtomicBoolean(false);
         AtomicBoolean noSpace = new AtomicBoolean(false);
         AtomicBoolean nonWritable = new AtomicBoolean(false);
+        AtomicBoolean dataSyncError = new AtomicBoolean(false);
+        AtomicBoolean manifestSyncError = new AtomicBoolean(false);
+        AtomicBoolean manifestWriteError = new AtomicBoolean(false);
+        boolean countRandomReads = false;
+        AtomicInteger counter = new AtomicInteger(0);
 
         public SpecialEnv(DefaultEnv env) {
             this.env = env;
@@ -100,6 +135,10 @@ public class DBTest {
 
             @Override
             public Status sync() {
+                if (this.env.dataSyncError.get()) {
+                    return Status.IOError("simulated data sync error");
+                }
+
                 while (this.env.delayDataSync.get()) {
                     try {
                         Thread.sleep(100);
@@ -121,7 +160,11 @@ public class DBTest {
 
             @Override
             public Status append(String data) {
-                return this.base.append(data);
+                if (this.env.manifestWriteError.get()) {
+                    return Status.IOError("simulated write error");
+                } else {
+                    return this.base.append(data);
+                }
             }
 
             @Override
@@ -136,7 +179,11 @@ public class DBTest {
 
             @Override
             public Status sync() {
-                return this.base.sync();
+                if (this.env.manifestSyncError.get()) {
+                    return Status.IOError("simulated sync error");
+                } else {
+                    return this.base.sync();
+                }
             }
         }
 
@@ -163,9 +210,29 @@ public class DBTest {
             return this.env.newAppendableFile(filename);
         }
 
+        class CountingFile implements RandomAccessFile {
+            private RandomAccessFile randomAccessFile;
+            private AtomicInteger counter;
+
+            public CountingFile(RandomAccessFile randomAccessFile, AtomicInteger counter) {
+                this.randomAccessFile = randomAccessFile;
+                this.counter = counter;
+            }
+
+            @Override
+            public Pair<Status, String> read(long offset, int n) {
+                this.counter.incrementAndGet();
+                return this.randomAccessFile.read(offset, n);
+            }
+        }
+
         @Override
         public Pair<Status, RandomAccessFile> newRandomAccessFile(String filename) {
-            return this.env.newRandomAccessFile(filename);
+            Pair<Status, RandomAccessFile> pair = this.env.newRandomAccessFile(filename);
+            if (pair.getKey().isOk() && this.countRandomReads) {
+                return new Pair<>(pair.getKey(), new CountingFile(pair.getValue(), counter));
+            }
+            return pair;
         }
 
         @Override
@@ -284,6 +351,13 @@ public class DBTest {
         DB.destroyDB(this.dbname, new Options());
     }
 
+    void close() {
+        if (this.db != null) {
+            this.db.close();
+        }
+        this.db = null;
+    }
+
     public Status tryReopen() {
         if (this.db != null) {
             this.db.close();
@@ -351,6 +425,10 @@ public class DBTest {
 
     Status put(String key, String value) {
         return this.db.put(new WriteOptions(), key, value);
+    }
+
+    Status put(WriteOptions options, String key, String value) {
+        return this.db.put(options, key, value);
     }
 
     Status delete(String key) {
