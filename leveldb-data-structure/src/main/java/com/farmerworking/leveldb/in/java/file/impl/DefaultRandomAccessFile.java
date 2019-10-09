@@ -15,12 +15,12 @@ public class DefaultRandomAccessFile implements RandomAccessFile {
     }
 
     @Override
-    public Pair<Status, String> read(long offset, int n) {
+    public synchronized Pair<Status, String> read(long offset, int n) {
         try {
             randomAccessFile.seek(offset);
 
             byte[] bytes = new byte[n];
-            randomAccessFile.readFully(bytes);
+            randomAccessFile.read(bytes);
             return new Pair<>(Status.OK(), new String(ByteUtils.toCharArray(bytes)));
         } catch (IOException e) {
             return new Pair<>(Status.IOError(e.getMessage()), null);
