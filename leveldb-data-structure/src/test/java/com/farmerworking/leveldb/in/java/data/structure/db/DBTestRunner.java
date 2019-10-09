@@ -1388,4 +1388,50 @@ public class DBTestRunner {
         }
         assertEquals(count, countFiles());
     }
+
+    @Test
+    public void testBloomFilter() {
+        dbTest.env.countRandomReads = true;
+        Options options = dbTest.currentOptions();
+        options.setEnv(dbTest.env);
+        options.setBlockCache(new ShardedLRUCache(0)); // Prevent cache hits
+        options.setFilterPolicy(new BloomFilterPolicy(10));
+        dbTest.reopen(options);
+
+        // Populate multiple layers
+        int N = 10000;
+        for (int i = 0; i < N; i++) {
+            assertTrue(dbTest.put(key(i), key(i)).isOk());
+        }
+        dbTest.db.compactRange("a", "z");
+        for (int i = 0; i < N; i+=100) {
+            assertTrue(dbTest.put(key(i), key(i)).isOk());
+        }
+        dbTest.db.TEST_compactMemtable();
+
+        // Prevent auto compactions triggered by seeks
+        dbTest.env.delayDataSync.set(true);
+
+        // Lookup present keys.  Should rarely read from small sstable.
+        dbTest.env.counter.set(0);
+        for (int i = 0; i < N; i++) {
+            assertEquals(key(i), dbTest.get(key(i)));
+        }
+        int reads = dbTest.env.counter.get();
+        System.out.println(String.format("%d present => %d reads", N, reads));
+        assertTrue(reads >= N);
+        assertTrue(reads <= N + 2*N/100);
+
+        // Lookup unpresent keys.  Should rarely read from either sstable.
+        dbTest.env.counter.set(0);
+        for (int i = 0; i < N; i++) {
+            assertEquals("NOT_FOUND", dbTest.get(key(i) + ".missing"));
+        }
+        reads = dbTest.env.counter.get();
+        System.out.println(String.format("%d missing => %d reads", N, reads));
+        assertTrue(reads <= 3*N/100);
+
+        dbTest.env.delayDataSync.set(false);
+        dbTest.close();
+    }
 }
