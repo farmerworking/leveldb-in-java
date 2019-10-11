@@ -20,6 +20,7 @@ import com.farmerworking.leveldb.in.java.data.structure.memory.InternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.ParsedInternalKey;
 import com.farmerworking.leveldb.in.java.data.structure.memory.ValueType;
 import com.farmerworking.leveldb.in.java.data.structure.version.Config;
+import com.farmerworking.leveldb.in.java.data.structure.writebatch.WriteBatch;
 import com.google.common.collect.Lists;
 import javafx.util.Pair;
 import org.apache.commons.lang3.StringUtils;
@@ -120,7 +121,7 @@ public class DBTestRunner {
             for (int i = 0; i < 2; i++) {
                 String key = i == 0 ? "foo" : StringUtils.repeat('x', 200);
                 assertTrue(dbTest.put(key, "v1").isOk());
-                long snapshot = dbTest.db.getSnapshot();
+                Snapshot snapshot = dbTest.db.getSnapshot();
                 assertTrue(dbTest.put(key, "v2").isOk());
                 assertEquals("v2", dbTest.get(key));
                 assertEquals("v1", dbTest.get(key, snapshot));
@@ -469,7 +470,7 @@ public class DBTestRunner {
         if (s.length() < 6) {
             s = StringUtils.repeat('0', 6 - s.length()) + s;
         } else if (s.length() > 6) {
-            s.substring(s.length() - 6, s.length());
+            s = s.substring(s.length() - 6);
         }
 
         return "key" + s;
@@ -765,11 +766,11 @@ public class DBTestRunner {
     public void testSnapshot() {
         do {
             dbTest.put("foo", "v1");
-            long s1 = dbTest.db.getSnapshot();
+            Snapshot s1 = dbTest.db.getSnapshot();
             dbTest.put("foo", "v2");
-            long s2 = dbTest.db.getSnapshot();
+            Snapshot s2 = dbTest.db.getSnapshot();
             dbTest.put("foo", "v3");
-            long s3 = dbTest.db.getSnapshot();
+            Snapshot s3 = dbTest.db.getSnapshot();
 
             dbTest.put("foo", "v4");
             assertEquals("v1", dbTest.get("foo", s1));
@@ -845,7 +846,7 @@ public class DBTestRunner {
             String big = TestUtils.randomString(50000);
             dbTest.put("foo", big);
             dbTest.put("pastfoo", "v");
-            long s = dbTest.db.getSnapshot();
+            Snapshot s = dbTest.db.getSnapshot();
             dbTest.put("foo", "tiny");
             dbTest.put("pastfoo2", "v2"); // Advance sequence number one more
 
@@ -1433,5 +1434,161 @@ public class DBTestRunner {
 
         dbTest.env.delayDataSync.set(false);
         dbTest.close();
+    }
+
+    @Test
+    public void testMultiThreaded() throws InterruptedException {
+        do {
+            // Initialize state
+            MultiThreadState state = new MultiThreadState();
+            state.setDbTest(dbTest);
+
+            // start thread
+            MultiThread[] multiThreads = new MultiThread[MultiThreadState.kNumThread];
+            for (int i = 0; i < MultiThreadState.kNumThread; i++) {
+                multiThreads[i] = new MultiThread();
+                multiThreads[i].setState(state);
+                multiThreads[i].setId(i);
+
+                new Thread(new MultiThreadRunnable(multiThreads[i])).start();
+            }
+
+            // Let them run for a while
+            Thread.sleep(MultiThreadState.kTestSeconds * 1000);
+
+            // Stop the threads and wait for them to finish
+            state.getStop().set(true);
+            for (int i = 0; i < MultiThreadState.kNumThread; i++) {
+                while(!state.getThreadDone()[i].get()) {
+                    Thread.sleep(100);
+                }
+            }
+        } while (dbTest.changeOptions());
+    }
+
+    private String randomKey(Random random) {
+        int len = random.nextInt(3) == 1 ? 1 // Short sometimes to encourage collisions
+            : random.nextInt(10);
+        return TestUtils.randomKey(len);
+    }
+
+    @Test
+    public void testRandomized() {
+        Random random = new Random();
+
+        do {
+            ModelDB model = new ModelDB(dbTest.currentOptions());
+            int N = 10000;
+            Snapshot modelSnap = null;
+            Snapshot dbSnap = null;
+            String k = null, v;
+            for (int step = 0; step < N; step++) {
+                if (step % 100 == 0) {
+                    System.out.println(String.format("Step %d of %d", step, N));
+                }
+
+                int p = random.nextInt(100);
+                if (p < 45) {
+                    k = randomKey(random);
+                    v = TestUtils.randomString(random.nextInt(20) == 1 ? 100 + random.nextInt(100) : random.nextInt(8));
+                    assertTrue(model.put(new WriteOptions(), k, v).isOk());
+                    assertTrue(dbTest.db.put(new WriteOptions(), k, v).isOk());
+                } else if (p < 90) {
+                    k = randomKey(random);
+                    assertTrue(model.delete(new WriteOptions(), k).isOk());
+                    assertTrue(dbTest.db.delete(new WriteOptions(), k).isOk());
+                } else {
+                    WriteBatch batch = new WriteBatch();
+                    int num = random.nextInt(8);
+                    for (int i = 0; i < num; i++) {
+                        if (i == 0 || random.nextInt(10) != 1) {
+                            k = randomKey(random);
+                        } else {
+                            // Periodically re-use the same key from the previous iter, so
+                            // we have multiple entries in the write batch for the same key
+                        }
+
+                        if (random.nextInt(2) == 1) {
+                            v = TestUtils.randomString(random.nextInt(10));
+                            batch.put(k, v);
+                        } else {
+                            batch.delete(k);
+                        }
+                    }
+                    assertTrue(model.write(new WriteOptions(), batch).isOk());
+                    assertTrue(dbTest.db.write(new WriteOptions(), batch).isOk());
+                }
+
+                if ((step % 100) == 0) {
+                    assertTrue(compareIterators(step, model, dbTest.db, null, null));
+                    assertTrue(compareIterators(step, model, dbTest.db, modelSnap, dbSnap));
+                    // Save a snapshot from each DB this time that we'll use next
+                    // time we compare things, to make sure the current state is
+                    // preserved with the snapshot
+                    if (modelSnap != null) {
+                        model.releaseSnapshot(modelSnap);
+                    }
+
+                    if (dbSnap != null) {
+                        model.releaseSnapshot(dbSnap);
+                    }
+
+                    dbTest.reopen();
+                    assertTrue(compareIterators(step, model, dbTest.db, null, null));
+                    modelSnap = model.getSnapshot();
+                    dbSnap = dbTest.db.getSnapshot();
+                }
+            }
+            if (modelSnap != null) {
+                model.releaseSnapshot(modelSnap);
+            }
+
+            if (dbSnap != null) {
+                model.releaseSnapshot(dbSnap);
+            }
+        } while (dbTest.changeOptions());
+    }
+
+    private boolean compareIterators(int step, ModelDB model, DB db, Snapshot modelSnap, Snapshot dbSnap) {
+        ReadOptions options = new ReadOptions();
+        options.setSnapshot(modelSnap);
+        Iterator<String, String> miter = model.iterator(options);
+        options.setSnapshot(dbSnap);
+        Iterator<String, String> dbiter = db.iterator(options);
+
+        boolean ok = true;
+        int count = 0;
+
+        miter.seekToFirst();
+        dbiter.seekToFirst();
+        while(ok && miter.valid() && dbiter.valid()) {
+            count ++;
+            if (miter.key().compareTo(dbiter.key()) != 0) {
+                System.out.println(String.format("step %d: Key mismatch: '%s' vs. '%s'", step, miter.key(), dbiter.key()));
+                ok = false;
+                break;
+            }
+
+            if (miter.value().compareTo(dbiter.value()) != 0) {
+                System.out.println(String.format("step %d: Value mismatch for key '%s': '%s' vs. '%s'", step, miter.key(), miter.value(), dbiter.value()));
+                ok = false;
+                break;
+            }
+
+
+            miter.next();
+            dbiter.next();
+        }
+
+        if (ok) {
+            if (miter.valid() != dbiter.valid()) {
+                System.out.println(String.format("step %d: Mismatch at end of iterators: %s vs. %s", step, miter.key(), miter.valid(), dbiter.valid()));
+                ok = false;
+            }
+        }
+        System.out.println(String.format("%d entries compared: ok=%s", count, ok));
+        miter.close();
+        dbiter.close();
+        return ok;
     }
 }

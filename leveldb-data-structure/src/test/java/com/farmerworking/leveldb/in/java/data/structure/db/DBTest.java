@@ -409,7 +409,7 @@ public class DBTest {
         return get(key, null);
     }
 
-    String get(String key, Long snapshot) {
+    String get(String key, Snapshot snapshot) {
         ReadOptions readOptions = new ReadOptions();
         readOptions.setSnapshot(snapshot);
         Pair<Status, String> pair = this.db.get(readOptions, key);

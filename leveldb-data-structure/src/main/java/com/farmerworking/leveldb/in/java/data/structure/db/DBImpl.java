@@ -145,11 +145,11 @@ public class DBImpl implements DB {
         String result = null;
         try {
             this.mutex.lock();
-            Long snapshot;
+            SnapshotImpl snapshot;
             if (readOptions.getSnapshot() != null) {
-                snapshot = readOptions.getSnapshot();
+                snapshot = (SnapshotImpl)readOptions.getSnapshot();
             } else {
-                snapshot = this.versions.getLastSequence();
+                snapshot = new SnapshotImpl(this.versions.getLastSequence());
             }
 
             IMemtable localMemtable = this.memtable;
@@ -163,24 +163,24 @@ public class DBImpl implements DB {
             // Unlock while reading from files and memtables
             try {
                 this.mutex.unlock();
-                Pair<Boolean, Pair<Status, String>> memtableGet = localMemtable.get(key, snapshot);
+                Pair<Boolean, Pair<Status, String>> memtableGet = localMemtable.get(key, snapshot.getSequence());
                 if (memtableGet.getKey()) {
                     status = memtableGet.getValue().getKey();
                     result = memtableGet.getValue().getValue();
                 } else if (localImmutable != null) {
-                    Pair<Boolean, Pair<Status, String>> immutableMemtableGet = localImmutable.get(key, snapshot);
+                    Pair<Boolean, Pair<Status, String>> immutableMemtableGet = localImmutable.get(key, snapshot.getSequence());
 
                     if (immutableMemtableGet.getKey()) {
                         status = immutableMemtableGet.getValue().getKey();
                         result = immutableMemtableGet.getValue().getValue();
                     } else {
-                        Pair<Status, String> versionGet = localCurrentVersion.get(readOptions, new InternalKey(key, snapshot), getStats);
+                        Pair<Status, String> versionGet = localCurrentVersion.get(readOptions, new InternalKey(key, snapshot.getSequence()), getStats);
                         status = versionGet.getKey();
                         result = versionGet.getValue();
                         haveStatUpdate = true;
                     }
                 } else {
-                    Pair<Status, String> versionGet = localCurrentVersion.get(readOptions, new InternalKey(key, snapshot), getStats);
+                    Pair<Status, String> versionGet = localCurrentVersion.get(readOptions, new InternalKey(key, snapshot.getSequence()), getStats);
                     status = versionGet.getKey();
                     result = versionGet.getValue();
                     haveStatUpdate = true;
@@ -368,21 +368,21 @@ public class DBImpl implements DB {
         }
     }
 
-    public long getSnapshot() {
+    public Snapshot getSnapshot() {
         try {
             this.mutex.lock();
             long result = this.versions.getLastSequence();
             this.snapshots.add(result);
-            return result;
+            return new SnapshotImpl(result);
         } finally {
             this.mutex.unlock();
         }
     }
 
-    public void releaseSnapshot(long snapshot) {
+    public void releaseSnapshot(Snapshot snapshot) {
         try {
             this.mutex.lock();
-            this.snapshots.remove(snapshot);
+            this.snapshots.remove(((SnapshotImpl)snapshot).getSequence());
         } finally {
             this.mutex.unlock();
         }
@@ -392,7 +392,9 @@ public class DBImpl implements DB {
     public Iterator<String, String> iterator(ReadOptions readOptions) {
         Pair<Iterator<String, String>, Pair<Long, Long>> pair = internalIterator(readOptions);
         return new DBIterator(this, this.internalKeyComparator.getUserComparator(), pair.getKey() ,
-            (readOptions.getSnapshot() != null ? readOptions.getSnapshot() : pair.getValue().getKey()),
+            (readOptions.getSnapshot() != null ?
+                ((SnapshotImpl)readOptions.getSnapshot()).getSequence() :
+                pair.getValue().getKey()),
             pair.getValue().getValue());
     }
 

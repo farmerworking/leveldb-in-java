@@ -29,9 +29,9 @@ public interface DB {
 
     int numLevelFiles(int level);
 
-    long getSnapshot();
+    Snapshot getSnapshot();
 
-    void releaseSnapshot(long snapshot);
+    void releaseSnapshot(Snapshot snapshot);
 
     void compactRange(String begin, String end);
 

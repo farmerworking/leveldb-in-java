@@ -66,7 +66,7 @@ public class WriteBatch {
         return this.buffer.length + this.builder.length();
     }
 
-    public Status iterate(MemTableInserter memTableInserter) {
+    public Status iterate(WriteBatchIterateHandler handler) {
         char[] chars = encode();
         if (chars.length < kHeaderSize) {
             return Status.Corruption("malformed WriteBatch (too small)");
@@ -94,7 +94,7 @@ public class WriteBatch {
                     } else {
                         String value = pair.getKey();
                         index = pair.getValue();
-                        memTableInserter.put(key, value);
+                        handler.put(key, value);
                     }
                 }
             } else {
@@ -103,7 +103,7 @@ public class WriteBatch {
                     return Status.Corruption("bad WriteBatch Delete");
                 } else {
                     index = pair.getValue();
-                    memTableInserter.delete(pair.getKey());
+                    handler.delete(pair.getKey());
                 }
             }
         }

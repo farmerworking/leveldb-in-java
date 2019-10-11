@@ -1,5 +1,6 @@
 package com.farmerworking.leveldb.in.java.api;
 
+import com.farmerworking.leveldb.in.java.data.structure.db.Snapshot;
 import lombok.Data;
 
 @Data
@@ -9,5 +10,5 @@ public class ReadOptions {
     // Default: false
     boolean verifyChecksums = false;
 
-    Long snapshot = null;
+    Snapshot snapshot = null;
 }
